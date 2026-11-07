@@ -264,22 +264,22 @@
 				TargetAttributes = {
 					A80000000000000000000001 = {
 						CreatedOnToolsVersion = 27.0;
-						DevelopmentTeam = QKZ4JTYUVM;
+						DevelopmentTeam = 98RBK2A2JP;
 						ProvisioningStyle = Automatic;
 					};
 					A80000000000000000000002 = {
 						CreatedOnToolsVersion = 27.0;
-						DevelopmentTeam = QKZ4JTYUVM;
+						DevelopmentTeam = 98RBK2A2JP;
 						ProvisioningStyle = Automatic;
 					};
 					A80000000000000000000003 = {
 						CreatedOnToolsVersion = 27.0;
-						DevelopmentTeam = QKZ4JTYUVM;
+						DevelopmentTeam = 98RBK2A2JP;
 						ProvisioningStyle = Automatic;
 					};
 					A80000000000000000000004 = {
 						CreatedOnToolsVersion = 27.0;
-						DevelopmentTeam = QKZ4JTYUVM;
+						DevelopmentTeam = 98RBK2A2JP;
 						ProvisioningStyle = Automatic;
 						TestTargetID = A80000000000000000000001;
 					};
@@ -402,7 +402,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = QKZ4JTYUVM;
+				DEVELOPMENT_TEAM = 98RBK2A2JP;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -430,7 +430,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = QKZ4JTYUVM;
+				DEVELOPMENT_TEAM = 98RBK2A2JP;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -449,7 +449,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				DEVELOPMENT_TEAM = QKZ4JTYUVM;
+				DEVELOPMENT_TEAM = 98RBK2A2JP;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "free MIDI player (FOSS)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -460,7 +460,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.lukeknoble.freemidiplayer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lukeknoble.freemidiplayer.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -471,7 +471,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				DEVELOPMENT_TEAM = QKZ4JTYUVM;
+				DEVELOPMENT_TEAM = 98RBK2A2JP;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "free MIDI player (FOSS)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -482,7 +482,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.lukeknoble.freemidiplayer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lukeknoble.freemidiplayer.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};

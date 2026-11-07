@@ -14,17 +14,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-BUNDLE_ID="${BUNDLE_ID:-com.lukeknoble.freemidiplayer}"
+BUNDLE_ID="${BUNDLE_ID:-com.lukeknoble.freemidiplayer.ios}"
 APP_NAME="${APP_NAME:-free MIDI player (FOSS)}"
-TEAM_ID="${DEVELOPMENT_TEAM:-QKZ4JTYUVM}"
+TEAM_ID="${DEVELOPMENT_TEAM:-98RBK2A2JP}"
 SCHEME="PianoWait"
 PROJECT="PianoWait.xcodeproj"
 ARCHIVE_PATH="${ARCHIVE_PATH:-$REPO_ROOT/build/FreeMIDIPlayer.xcarchive}"
 EXPORT_PATH="${EXPORT_PATH:-$REPO_ROOT/build/Export}"
 EXPORT_OPTIONS="${EXPORT_OPTIONS:-$REPO_ROOT/AppStore/ExportOptions.plist}"
 
-ASC_KEY_ID="${ASC_KEY_ID:-362BK739MY}"
-ASC_ISSUER_ID="${ASC_ISSUER_ID:-cd0c881b-f57b-4030-9d14-73f868ececb6}"
+ASC_KEY_ID="${ASC_KEY_ID:-V2GQ3A574Q}"
+ASC_ISSUER_ID="${ASC_ISSUER_ID:-bee72f9a-0604-4d54-bacd-f25c84ec5bb6}"
 ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/.private_keys/AuthKey_${ASC_KEY_ID}.p8}"
 
 AUTH_FLAGS=()

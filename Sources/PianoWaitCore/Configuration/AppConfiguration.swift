@@ -4,7 +4,7 @@ import Foundation
 public struct AppConfiguration: Sendable, Equatable {
     public static let defaultDisplayName = "free MIDI player (FOSS)"
     public static let fossDisplayName = "PianoWait"
-    public static let defaultBundleIdentifier = "com.lukeknoble.freemidiplayer"
+    public static let defaultBundleIdentifier = "com.lukeknoble.freemidiplayer.ios"
 
     public let displayName: String
     public let bundleIdentifier: String

@@ -5,19 +5,19 @@ final class AppConfigurationTests: XCTestCase {
     func testDefaultDisplayNameIsFreeMIDIPlayer() {
         let config = AppConfiguration(infoDictionary: nil)
         XCTAssertEqual(config.displayName, "free MIDI player (FOSS)")
-        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer")
+        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer.ios")
     }
 
     func testReadsRebrandedInfoPlistValues() {
         let plist: [String: Any] = [
             "CFBundleDisplayName": "free MIDI player (FOSS)",
-            "CFBundleIdentifier": "com.lukeknoble.freemidiplayer",
+            "CFBundleIdentifier": "com.lukeknoble.freemidiplayer.ios",
             "CFBundleShortVersionString": "1.1.0",
             "CFBundleVersion": "42",
         ]
         let config = AppConfiguration(infoDictionary: plist)
         XCTAssertEqual(config.displayName, "free MIDI player (FOSS)")
-        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer")
+        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer.ios")
         XCTAssertEqual(config.version, "1.1.0")
         XCTAssertEqual(config.buildNumber, "42")
     }
@@ -31,7 +31,7 @@ final class AppConfigurationTests: XCTestCase {
         ]
         let config = AppConfiguration(infoDictionary: plist)
         XCTAssertEqual(config.displayName, "free MIDI player (FOSS)")
-        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer")
+        XCTAssertEqual(config.bundleIdentifier, "com.lukeknoble.freemidiplayer.ios")
         XCTAssertEqual(config.version, "1.0")
         XCTAssertEqual(config.buildNumber, "1")
     }

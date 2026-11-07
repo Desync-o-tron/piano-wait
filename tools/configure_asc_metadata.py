@@ -20,9 +20,9 @@ import jwt
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 METADATA_DIR = REPO_ROOT / "fastlane" / "metadata" / "en-US"
 
-BUNDLE_ID = os.environ.get("BUNDLE_ID", "com.lukeknoble.freemidiplayer")
-KEY_ID = os.environ.get("ASC_KEY_ID", "362BK739MY")
-ISSUER_ID = os.environ.get("ASC_ISSUER_ID", "cd0c881b-f57b-4030-9d14-73f868ececb6")
+BUNDLE_ID = os.environ.get("BUNDLE_ID", "com.lukeknoble.freemidiplayer.ios")
+KEY_ID = os.environ.get("ASC_KEY_ID", "V2GQ3A574Q")
+ISSUER_ID = os.environ.get("ASC_ISSUER_ID", "bee72f9a-0604-4d54-bacd-f25c84ec5bb6")
 KEY_PATH = pathlib.Path(
     os.environ.get("ASC_KEY_PATH", os.path.expanduser(f"~/.private_keys/AuthKey_{KEY_ID}.p8"))
 )
