@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./tools/release_appstore.sh --export
 #   ./tools/release_appstore.sh --validate
 #   ./tools/release_appstore.sh --upload
+#   ./tools/release_appstore.sh --configure-metadata
 #   ./tools/release_appstore.sh --all
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -203,24 +204,31 @@ upload_ipa() {
     --apiIssuer "$ASC_ISSUER_ID"
 }
 
+configure_metadata() {
+  echo "==> Configuring App Store Connect metadata via REST API..."
+  SSL_CERT_FILE=/etc/ssl/cert.pem python3 "$REPO_ROOT/tools/configure_asc_metadata.py"
+}
+
 if [[ $# -eq 0 ]]; then
-  echo "Usage: $0 [--register-bundle-id] [--archive] [--export] [--validate] [--upload] [--all]"
+  echo "Usage: $0 [--register-bundle-id] [--archive] [--export] [--validate] [--upload] [--configure-metadata] [--all]"
   exit 1
 fi
 
 for arg in "$@"; do
   case "$arg" in
-    --register-bundle-id) register_bundle_id ;;
-    --archive)            build_archive ;;
-    --export)             export_ipa ;;
-    --validate)           validate_ipa ;;
-    --upload)             upload_ipa ;;
+    --register-bundle-id)  register_bundle_id ;;
+    --archive)             build_archive ;;
+    --export)              export_ipa ;;
+    --validate)            validate_ipa ;;
+    --upload)              upload_ipa ;;
+    --configure-metadata)  configure_metadata ;;
     --all)
       register_bundle_id
       build_archive
       export_ipa
       validate_ipa
       upload_ipa
+      configure_metadata
       ;;
     *)
       echo "Unknown option: $arg"
