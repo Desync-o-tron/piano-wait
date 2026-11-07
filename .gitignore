@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+__pycache__/
+Local.xcconfig
+Config/Local.xcconfig
+*.local.mid

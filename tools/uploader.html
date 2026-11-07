@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PianoWait MIDI Uploader</title>
+<style>
+  :root { color-scheme: dark; --green: #10b981; --blue: #3b82f6; --line: #2a3040; --muted: #9aa3b5; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d0f1a; color: #eef1f7; font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  h2 { margin: 32px 0 8px; font-size: 18px; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  code { background: #1a1f2e; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+  label { display: block; margin: 20px 0 6px; font-weight: 600; }
+  input[type=password] { width: 100%; padding: 10px 12px; background: #151927; color: inherit; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+  #drop { margin-top: 20px; padding: 44px 20px; border: 2px dashed var(--line); border-radius: 12px; text-align: center; cursor: pointer; }
+  #drop:hover, #drop:focus-visible, #drop.over { border-color: var(--green); background: #10b98114; outline: none; }
+  button { padding: 7px 14px; background: #1f2534; color: inherit; border: 1px solid var(--line); border-radius: 8px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; word-break: break-word; }
+  th { color: var(--muted); font-weight: 500; }
+  td.number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ok { color: var(--green); }
+  .bad { color: #f87171; }
+  ul { margin: 12px 0 0; padding: 0; list-style: none; }
+  li { padding: 4px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PianoWait MIDI Uploader</h1>
+  <p>Drop MIDI files here to add them to your Google Cloud Storage bucket. They appear in the app after a sync.</p>
+
+  <label for="bucket">Bucket name</label>
+  <input id="bucket" type="text" autocomplete="off" spellcheck="false" placeholder="your-gcs-bucket-name" style="width:100%;padding:10px 12px;background:#151927;color:inherit;border:1px solid var(--line);border-radius:8px;font:inherit;">
+
+  <label for="token">Access token</label>
+  <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a token to enable uploads">
+  <p>Get one by running <code>gcloud auth print-access-token</code>. It stays in this page and lasts about an hour.</p>
+
+  <div id="drop" role="button" tabindex="0">Drop <strong>.mid</strong> or <strong>.midi</strong> files here, or click to choose</div>
+  <input id="picker" type="file" accept=".mid,.midi,audio/midi" multiple hidden>
+  <ul id="log" aria-live="polite"></ul>
+
+  <div class="row">
+    <h2>In the bucket</h2>
+    <button id="refresh" type="button">Refresh</button>
+  </div>
+  <p id="list-status"></p>
+  <table>
+    <thead><tr><th>Name</th><th>Updated</th><th style="text-align:right">Size</th></tr></thead>
+    <tbody id="objects"></tbody>
+  </table>
+</main>
+
+<script>
+const API = "https://storage.googleapis.com";
+const MIDI_NAME = /\.midi?$/i;
+const MIDI_MAGIC = [0x4d, 0x54, 0x68, 0x64]; // "MThd"
+
+const element = (id) => document.getElementById(id);
+const currentBucket = () => element("bucket").value.trim();
+
+function log(message, className) {
+  const item = document.createElement("li");
+  item.textContent = message;
+  if (className) item.className = className;
+  element("log").prepend(item);
+}
+
+async function isMidiFile(file) {
+  const header = new Uint8Array(await file.slice(0, MIDI_MAGIC.length).arrayBuffer());
+  return MIDI_MAGIC.every((byte, index) => header[index] === byte);
+}
+
+async function listObjects() {
+  const bucket = currentBucket();
+  if (!bucket) return [];
+  const objects = [];
+  let pageToken = "";
+  do {
+    const query = pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : "";
+    const response = await fetch(`${API}/storage/v1/b/${encodeURIComponent(bucket)}/o${query}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const page = await response.json();
+    objects.push(...(page.items || []).filter((item) => MIDI_NAME.test(item.name)));
+    pageToken = page.nextPageToken || "";
+  } while (pageToken);
+  return objects;
+}
+
+async function refreshList() {
+  const status = element("list-status");
+  if (!currentBucket()) {
+    status.textContent = "Enter a bucket name above to list or upload MIDI files.";
+    element("objects").replaceChildren();
+    return;
+  }
+  status.textContent = "Loading…";
+  try {
+    const objects = await listObjects();
+    const rows = objects.map((item) => {
+      const row = document.createElement("tr");
+      const name = row.insertCell();
+      name.textContent = item.name;
+      row.insertCell().textContent = new Date(item.updated).toLocaleString();
+      const size = row.insertCell();
+      size.className = "number";
+      size.textContent = `${(Number(item.size) / 1024).toFixed(1)} KB`;
+      return row;
+    });
+    element("objects").replaceChildren(...rows);
+    status.textContent = objects.length === 1 ? "1 MIDI file" : `${objects.length} MIDI files`;
+  } catch (error) {
+    status.textContent = `Could not list the bucket: ${error.message}`;
+  }
+}
+
+async function uploadFile(file, token) {
+  const bucket = currentBucket();
+  if (!bucket) throw new Error("enter a bucket name first");
+  const parameters = new URLSearchParams({ uploadType: "media", name: file.name, access_token: token });
+  const response = await fetch(`${API}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?${parameters}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) {
+    const detail = response.status === 401 ? "the token is invalid or expired"
+      : response.status === 403 ? "this account cannot write to the bucket"
+      : `HTTP ${response.status}`;
+    throw new Error(detail);
+  }
+}
+
+async function handleFiles(files) {
+  const token = element("token").value.trim();
+  if (!token) {
+    log("Paste an access token first.", "bad");
+    element("token").focus();
+    return;
+  }
+  for (const file of files) {
+    if (!MIDI_NAME.test(file.name)) {
+      log(`Skipped ${file.name}: not a .mid or .midi file.`, "bad");
+    } else if (!(await isMidiFile(file))) {
+      log(`Skipped ${file.name}: it does not start with a MIDI header.`, "bad");
+    } else {
+      try {
+        await uploadFile(file, token);
+        log(`Uploaded ${file.name}.`, "ok");
+      } catch (error) {
+        log(`Could not upload ${file.name}: ${error.message}.`, "bad");
+      }
+    }
+  }
+  refreshList();
+}
+
+const drop = element("drop");
+const picker = element("picker");
+drop.addEventListener("click", () => picker.click());
+drop.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    picker.click();
+  }
+});
+picker.addEventListener("change", () => {
+  handleFiles([...picker.files]);
+  picker.value = "";
+});
+drop.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  drop.classList.add("over");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (event) => {
+  event.preventDefault();
+  drop.classList.remove("over");
+  handleFiles([...event.dataTransfer.files]);
+});
+element("refresh").addEventListener("click", refreshList);
+refreshList();
+</script>
+</body>
+</html>
