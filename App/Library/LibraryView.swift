@@ -26,7 +26,10 @@ struct LibraryView: View {
                     section("Imported", songs: library.importedSongs)
                 }
             }
-            .navigationTitle("PianoWait")
+            .navigationTitle(AppConfiguration.current.displayName)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                AdBannerView(placement: .library)
+            }
             .refreshable {
                 await library.syncBucket()
             }

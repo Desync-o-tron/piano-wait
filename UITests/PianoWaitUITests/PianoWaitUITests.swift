@@ -34,10 +34,17 @@ final class PianoWaitUITests: XCTestCase {
     func testLibraryListsBuiltInSongsOutOfTheBox() {
         let app = launchApp()
 
+        XCTAssertTrue(app.navigationBars["Free MIDI Player"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.otherElements["adBannerView"].waitForExistence(timeout: 10))
+
         for title in ["Ode to Joy", "Minuet in G", "Für Elise (Opening)"] {
             XCTAssertTrue(app.buttons["song-\(title)"].waitForExistence(timeout: 15), title)
         }
         attachScreenshot("Library")
+
+        // Active practice must never show the ad banner while playing or waiting.
+        openOdeToJoy(in: app)
+        XCTAssertFalse(app.otherElements["adBannerView"].exists)
     }
 
     /// The keys and how far ahead the screen shows, which the zoom button reports as its value.

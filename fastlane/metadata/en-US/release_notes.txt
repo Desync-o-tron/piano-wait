@@ -1,0 +1,1 @@
+Initial release of Free MIDI Player with real-time acoustic piano pitch detection, Wait-for-Me practice mode, hands-separate practice, A–B section looping, built-in classical MIDI library, and .mid file import.

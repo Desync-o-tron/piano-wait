@@ -3,6 +3,10 @@
 .swiftpm/
 DerivedData/
 build/
+*.xcarchive
+*.ipa
+fastlane/report.xml
+fastlane/test_output/
 xcuserdata/
 *.xcuserstate
 __pycache__/

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PracticeView: View {
     @State private var session: PracticeSession
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -25,6 +26,20 @@ struct PracticeView: View {
                         PracticeStatusBar(session: session)
                     }
                 }
+                .overlay {
+                    if AdPlacementPolicy.allowsAdInPracticeView(for: session.state) {
+                        PostSongSummaryCard(
+                            session: session,
+                            onPlayAgain: {
+                                session.restart()
+                                session.togglePlayback()
+                            },
+                            onBackToLibrary: {
+                                dismiss()
+                            }
+                        )
+                    }
+                }
 
             PianoKeyboardView(session: session)
                 .containerRelativeFrame(.vertical) { height, _ in
@@ -37,10 +52,18 @@ struct PracticeView: View {
         .toolbar(verticalSizeClass == .compact ? .hidden : .visible, for: .navigationBar)
         .preferredColorScheme(.dark)
         .task {
+            AdManager.shared.updatePlaybackState(session.state)
             await session.start()
         }
         .onDisappear {
+            AdManager.shared.updatePlaybackState(.paused)
             session.stop()
+        }
+        .onChange(of: session.state) { _, newState in
+            AdManager.shared.updatePlaybackState(newState)
+            if newState == .finished {
+                AdManager.shared.handleSongFinished(in: newState)
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase != .inactive else { return }
