@@ -1,5 +1,5 @@
 Testing without a physical piano:
-1. Open any built-in song (e.g., "Ode to Joy") from the Free MIDI Player library.
+1. Open any built-in song (e.g., "Ode to Joy") from the free MIDI player (FOSS) library.
 2. Tap Play. In "Wait for Me" mode, the falling notes pause at the first chord and display the expected notes (e.g., "Play C3 E4").
 3. You can either play those notes on an acoustic piano near the microphone, tap the corresponding keys on the on-screen piano keyboard at the bottom, or tap the Skip Step (>|) button in the top control bar to advance.
 4. Toggle "Wait for Me" off and tap the speaker icon ("Reference audio") to hear the built-in piano synthesizer play the piece continuously.

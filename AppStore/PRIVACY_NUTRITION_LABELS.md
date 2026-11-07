@@ -1,13 +1,13 @@
-# Privacy Nutrition Labels — Free MIDI Player
+# Privacy Nutrition Labels — free MIDI player (FOSS)
 
-This document provides the exact App Store Connect **App Privacy (Nutrition Labels)** configuration and technical justification for **Free MIDI Player** (`com.lukeknoble.freemidiplayer`), matching the bundled `App/PrivacyInfo.xcprivacy` manifest.
+This document provides the exact App Store Connect **App Privacy (Nutrition Labels)** configuration and technical justification for **free MIDI player (FOSS)** (`com.lukeknoble.freemidiplayer`), matching the bundled `App/PrivacyInfo.xcprivacy` manifest.
 
 ---
 
 ## 1. Microphone & Audio Data (Ephemeral On-Device DSP Only)
 
 - **Permission Prompt (`NSMicrophoneUsageDescription`)**:
-  > *"Free MIDI Player listens to your piano so it can wait for you to play the right notes."*
+  > *"free MIDI player (FOSS) listens to your piano so it can wait for you to play the right notes."*
 - **Is Audio Data collected off-device?** **No**
 - **Why Audio Data is NOT marked as "Collected" in App Store Connect**:
   - Microphone audio is captured via `AVAudioEngine` and analyzed in real time on the device using Apple's `Accelerate` (`vDSP`) FFT spectrum analyzer (`AcousticPitchDetector`).
@@ -19,7 +19,7 @@ This document provides the exact App Store Connect **App Privacy (Nutrition Labe
 
 ## 2. Advertising & Analytics Data (Google Mobile Ads / AdMob)
 
-Because **Free MIDI Player** integrates the **Google Mobile Ads SDK** (`GoogleMobileAds` 12.x) to display non-intrusive banner ads in `LibraryView` and post-song summary ads after song completion, declare the following data types in **App Store Connect → App Privacy**:
+Because **free MIDI player (FOSS)** integrates the **Google Mobile Ads SDK** (`GoogleMobileAds` 12.x) to display non-intrusive banner ads in `LibraryView` and post-song summary ads after song completion, declare the following data types in **App Store Connect → App Privacy**:
 
 ### Questionnaire Summary
 

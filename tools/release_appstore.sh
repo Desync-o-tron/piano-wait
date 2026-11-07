@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Free MIDI Player — App Store Connect Build, Archive, Export & Upload Script
+# free MIDI player (FOSS) — App Store Connect Build, Archive, Export & Upload Script
 # Supports:
 #   ./tools/release_appstore.sh --register-bundle-id
 #   ./tools/release_appstore.sh --archive
@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 BUNDLE_ID="${BUNDLE_ID:-com.lukeknoble.freemidiplayer}"
-APP_NAME="${APP_NAME:-Free MIDI Player}"
+APP_NAME="${APP_NAME:-free MIDI player (FOSS)}"
 TEAM_ID="${DEVELOPMENT_TEAM:-QKZ4JTYUVM}"
 SCHEME="PianoWait"
 PROJECT="PianoWait.xcodeproj"
@@ -44,10 +44,11 @@ register_bundle_id() {
   fi
 
   SSL_CERT_FILE=/etc/ssl/cert.pem python3 - "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_KEY_PATH" "$BUNDLE_ID" "$APP_NAME" <<'PY'
-import sys, time, json, urllib.request, urllib.error
+import sys, time, json, re, urllib.request, urllib.error
 import jwt
 
 key_id, issuer_id, key_path, bundle_id, app_name = sys.argv[1:6]
+portal_bundle_name = re.sub(r"[^A-Za-z0-9 ]+", "", app_name).strip()
 with open(key_path, "r") as f:
     private_key = f.read()
 
@@ -71,7 +72,27 @@ with urllib.request.urlopen(req, timeout=20) as resp:
     data = json.loads(resp.read().decode())
     existing = [b for b in data.get("data", []) if b["attributes"]["identifier"] == bundle_id]
     if existing:
-        print(f"Bundle ID already registered: {existing[0]['id']} ({bundle_id})")
+        bid_id = existing[0]["id"]
+        current_name = existing[0]["attributes"].get("name", "")
+        if current_name != portal_bundle_name:
+            patch_payload = {
+                "data": {
+                    "type": "bundleIds",
+                    "id": bid_id,
+                    "attributes": {"name": portal_bundle_name},
+                }
+            }
+            patch_req = urllib.request.Request(
+                f"https://api.appstoreconnect.apple.com/v1/bundleIds/{bid_id}",
+                data=json.dumps(patch_payload).encode("utf-8"),
+                headers=headers,
+                method="PATCH",
+            )
+            with urllib.request.urlopen(patch_req, timeout=20) as patch_resp:
+                patch_resp.read()
+            print(f"Updated Bundle ID portal name on App Store Connect: {bid_id} -> '{portal_bundle_name}'")
+        else:
+            print(f"Bundle ID already registered: {bid_id} ({bundle_id}, '{current_name}')")
         sys.exit(0)
 
 payload = {
@@ -79,7 +100,7 @@ payload = {
         "type": "bundleIds",
         "attributes": {
             "identifier": bundle_id,
-            "name": app_name,
+            "name": portal_bundle_name,
             "platform": "UNIVERSAL",
         },
     }

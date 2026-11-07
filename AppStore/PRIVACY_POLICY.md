@@ -1,12 +1,12 @@
-# Privacy Policy for Free MIDI Player
+# Privacy Policy for free MIDI player (FOSS)
 
 **Effective Date:** November 6, 2026
 
-**Free MIDI Player** ("the App") is an iOS and iPadOS piano practice application developed and published by General Neuroscience Inc. / Luke Knoble.
+**free MIDI player (FOSS)** ("the App") is an iOS and iPadOS piano practice application developed and published by General Neuroscience Inc. / Luke Knoble.
 
 ## 1. Microphone & Audio Processing (100% On-Device)
 
-Free MIDI Player uses your device's microphone solely to detect the musical notes and chords you play on an acoustic piano or keyboard during practice sessions.
+free MIDI player (FOSS) uses your device's microphone solely to detect the musical notes and chords you play on an acoustic piano or keyboard during practice sessions.
 
 - **No Recording or Storage:** Audio from the microphone is processed in real time in device memory using digital signal processing (Fast Fourier Transform pitch detection) and is immediately discarded.
 - **No Transmission:** The App never records, stores, or uploads microphone audio to any server.

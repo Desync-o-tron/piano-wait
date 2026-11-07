@@ -11,7 +11,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Free MIDI Player</string>
+	<string>free MIDI player (FOSS)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -37,9 +37,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Free MIDI Player listens to your piano so it can wait for you to play the right notes.</string>
+	<string>free MIDI player (FOSS) listens to your piano so it can wait for you to play the right notes.</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>Free MIDI Player uses this identifier to deliver relevant ads in the song library and after practice sessions, keeping all piano practice features free.</string>
+	<string>free MIDI player (FOSS) uses this identifier to deliver relevant ads in the song library and after practice sessions, keeping all piano practice features free.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

@@ -60,7 +60,7 @@ struct AdBannerView: View {
                 .background(.secondary.opacity(0.16), in: .rect(cornerRadius: 4))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Free MIDI Player — Supported by Ads")
+                Text("free MIDI player (FOSS) · Supported by Ads")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)

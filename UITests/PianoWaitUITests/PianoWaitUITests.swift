@@ -34,7 +34,7 @@ final class PianoWaitUITests: XCTestCase {
     func testLibraryListsBuiltInSongsOutOfTheBox() {
         let app = launchApp()
 
-        XCTAssertTrue(app.navigationBars["Free MIDI Player"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars["free MIDI player (FOSS)"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.otherElements["adBannerView"].waitForExistence(timeout: 10))
 
         for title in ["Ode to Joy", "Minuet in G", "Für Elise (Opening)"] {

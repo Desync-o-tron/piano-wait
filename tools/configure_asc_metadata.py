@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Configure App Store Connect metadata, categories, age rating (4+), and $0.00 Free pricing
-for Free MIDI Player (com.lukeknoble.freemidiplayer) via the App Store Connect REST API v1.
+for free MIDI player (FOSS) (com.lukeknoble.freemidiplayer) via the App Store Connect REST API v1.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def configure_app() -> int:
             f"ERROR: App record for '{BUNDLE_ID}' not found on App Store Connect yet.\n"
             "Create the initial App record once at https://appstoreconnect.apple.com/apps -> (+) New App:\n"
             "  - Platform: iOS\n"
-            "  - Name: Free MIDI Player\n"
+            "  - Name: free MIDI player (FOSS)\n"
             "  - Primary Language: English (U.S.)\n"
             f"  - Bundle ID: {BUNDLE_ID}\n"
             "  - SKU: freemidiplayer-ios-001",
@@ -127,7 +127,7 @@ def configure_app() -> int:
                         "type": "appInfoLocalizations",
                         "id": loc_id,
                         "attributes": {
-                            "name": read_meta("name.txt", "Free MIDI Player")[:30],
+                            "name": read_meta("name.txt", "free MIDI player (FOSS)")[:30],
                             "subtitle": subtitle,
                             "privacyPolicyUrl": privacy_url,
                         },

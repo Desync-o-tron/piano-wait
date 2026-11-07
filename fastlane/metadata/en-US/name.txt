@@ -1,1 +1,1 @@
-Free MIDI Player
+free MIDI player (FOSS)

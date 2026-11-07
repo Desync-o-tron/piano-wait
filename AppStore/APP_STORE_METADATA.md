@@ -1,10 +1,10 @@
-# App Store Connect Metadata & Submission Guide — Free MIDI Player
+# App Store Connect Metadata & Submission Guide — free MIDI player (FOSS)
 
 ## App Identity & Signing
 
 | Field | Value |
 | :--- | :--- |
-| **App Display Name** | `Free MIDI Player` |
+| **App Display Name** | `free MIDI player (FOSS)` |
 | **Subtitle** | `Piano Practice & Wait Mode` |
 | **Bundle Identifier** | `com.lukeknoble.freemidiplayer` |
 | **Apple Developer Team ID** | `QKZ4JTYUVM` (GENERAL NEURO INC) |
@@ -38,7 +38,7 @@ The app is pre-configured with Google's official iOS test IDs in `App/Info.plist
 ## App Store Listing Copy (`en-US`)
 
 ### Name (30 chars max)
-`Free MIDI Player`
+`free MIDI player (FOSS)`
 
 ### Subtitle (30 chars max)
 `Piano Practice & Wait Mode`
@@ -47,7 +47,7 @@ The app is pre-configured with Google's official iOS test IDs in `App/Info.plist
 Import any MIDI song, place your iPhone or iPad on your acoustic piano, and practice hands-separate or together with real-time Wait-for-Me note detection.
 
 ### Description
-Free MIDI Player turns any Standard MIDI File (.mid / .midi) into an interactive falling-note piano lesson that listens to your real acoustic piano or keyboard through the microphone.
+free MIDI player (FOSS) turns any Standard MIDI File (.mid / .midi) into an interactive falling-note piano lesson that listens to your real acoustic piano or keyboard through the microphone.
 
 FEATURES:
 • Real-Time Acoustic Piano Pitch Detection: Place your iPhone or iPad on your piano music stand—no cables or MIDI adapters required. Advanced polyphonic pitch detection listens for single notes and full two-hand chords, automatically adapting to your piano's tuning.
