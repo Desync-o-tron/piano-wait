@@ -132,7 +132,6 @@ build_archive() {
     -destination "generic/platform=iOS" \
     -archivePath "$ARCHIVE_PATH" \
     DEVELOPMENT_TEAM="$TEAM_ID" \
-    PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
     -allowProvisioningUpdates \
     "${AUTH_FLAGS[@]}"
   echo "==> Archive created at: $ARCHIVE_PATH"
