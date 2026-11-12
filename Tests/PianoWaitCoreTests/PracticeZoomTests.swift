@@ -245,4 +245,16 @@ final class PracticeZoomTests: XCTestCase {
         zoom.lookaheadSeconds = 2
         XCTAssertEqual(zoom.fallPosition(forTime: 12, playhead: 10), 1, accuracy: accuracy)
     }
+
+    func testEnsuringVisibleAutoPansToOffScreenNotes() throws {
+        // Start zoomed to C3..C4 (48...60), then ensure G5 (79) is visible.
+        let viewport = PianoKeyboardViewport(fitting: 48...60)
+        XCTAssertNil(viewport.frame(for: 79))
+
+        let panned = viewport.ensuringVisible([79])
+        XCTAssertEqual(panned.width, viewport.width, accuracy: accuracy)
+        let frame = try XCTUnwrap(panned.frame(for: 79))
+        XCTAssertGreaterThanOrEqual(frame.x, 0)
+        XCTAssertLessThanOrEqual(frame.x + frame.width, 1)
+    }
 }

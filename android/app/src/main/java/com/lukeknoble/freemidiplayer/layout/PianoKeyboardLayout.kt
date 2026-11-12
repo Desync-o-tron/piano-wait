@@ -146,6 +146,37 @@ class PianoKeyboardViewport(
         )
     }
 
+    fun ensuringVisible(notes: Set<Int>): PianoKeyboardViewport {
+        if (notes.isEmpty() || width >= 1.0 - TOLERANCE) return this
+        val frames = notes.mapNotNull { layout.frameFor(it) }
+        if (frames.isEmpty()) return this
+
+        val minX = frames.minOf { it.x }
+        val maxX = frames.maxOf { it.x + it.width }
+        val margin = min(layout.whiteKeyWidth * 1.5, width * 0.15)
+        val desiredLow = max(0.0, minX - margin)
+        val desiredHigh = min(1.0, maxX + margin)
+
+        if (desiredLow >= start - TOLERANCE && desiredHigh <= start + width + TOLERANCE) {
+            return this
+        }
+
+        val targetStart = if (desiredHigh - desiredLow > width) {
+            val mid = (minX + maxX) / 2.0
+            mid - width / 2.0
+        } else if (desiredLow < start) {
+            desiredLow
+        } else {
+            desiredHigh - width
+        }
+
+        return PianoKeyboardViewport(
+            layout = layout,
+            rawStart = targetStart,
+            rawWidth = width
+        )
+    }
+
     fun isApproximatelyEqual(other: PianoKeyboardViewport): Boolean {
         return abs(start - other.start) < TOLERANCE && abs(width - other.width) < TOLERANCE
     }

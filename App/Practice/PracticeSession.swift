@@ -56,6 +56,10 @@ final class PracticeSession {
     var noiseGate: Float = 0.0012 {
         didSet { microphone.setNoiseGate(noiseGate) }
     }
+    /// Whether the user has opted into sharing anonymized mic & note telemetry to improve pitch detection.
+    var isSharingMicTelemetry: Bool = PracticeTelemetryLogger.isUserOptedIn {
+        didSet { PracticeTelemetryLogger.isUserOptedIn = isSharingMicTelemetry }
+    }
 
     private let engine: WaitModeEngine
     private let synth = PianoSynth()
@@ -70,6 +74,11 @@ final class PracticeSession {
     private var trackedStepLatched = Set<UInt8>()
     private var trackedStepPeakRMS: Float = 0
     private var trackedStepTopPeaks: [SpectralPeak] = []
+    private var trackedStepPeakCandidates: [EvaluatedCandidateRecord] = []
+    private var trackedStepAttemptFrames: [PracticeTelemetryLogger.AttemptFrameSnapshot] = []
+    private var lastAttemptCaptureTime = Date.distantPast
+    private var autoPanKeyboardToExpectedNotes = true
+    private var showUpcomingStepHighlight = true
 
     init(song: MIDISong) {
         self.song = song
@@ -111,8 +120,39 @@ final class PracticeSession {
         UIApplication.shared.isIdleTimerDisabled = true
         startClock()
 
+        Task { @MainActor [weak self] in
+            let ota = await RemoteConfigLoader.shared.refresh()
+            self?.applyOTAConfiguration(ota)
+        }
+
         guard !AppEnvironment.isUITesting || AppEnvironment.usesMicrophoneInUITest else { return }
         await startAudio()
+    }
+
+    private func applyOTAConfiguration(_ ota: OTAConfiguration) {
+        if let engineConfig = ota.engine {
+            engineConfig.apply(to: &engine.configuration)
+        }
+        if let dspConfig = ota.dsp {
+            if let gate = dspConfig.noiseGateRMS {
+                noiseGate = gate
+            }
+            microphone.applyOTADSP(dspConfig)
+        }
+        if let uiConfig = ota.ui {
+            if let autoPan = uiConfig.autoPanKeyboardToExpectedNotes {
+                autoPanKeyboardToExpectedNotes = autoPan
+            }
+            if let showUpcoming = uiConfig.showUpcomingStepHighlight {
+                showUpcomingStepHighlight = showUpcoming
+            }
+        }
+        if let telemetryConfig = ota.telemetry {
+            Task {
+                await telemetry.applyOTATelemetry(telemetryConfig)
+            }
+        }
+        publish()
     }
 
     func stop() {
@@ -210,6 +250,27 @@ final class PracticeSession {
                 if !frame.topPeaks.isEmpty {
                     trackedStepTopPeaks = frame.topPeaks
                 }
+                if !frame.evaluatedCandidates.isEmpty {
+                    trackedStepPeakCandidates = frame.evaluatedCandidates
+                }
+            }
+            let now = Date()
+            if (!frame.onsets.isEmpty || (frame.rms >= noiseGate * 3 && !frame.evaluatedCandidates.isEmpty)),
+               trackedStepAttemptFrames.count < 16,
+               now.timeIntervalSince(lastAttemptCaptureTime) >= 0.12 {
+                lastAttemptCaptureTime = now
+                let elapsed = max(0, now.timeIntervalSince(trackedStepEnteredAt))
+                trackedStepAttemptFrames.append(
+                    PracticeTelemetryLogger.AttemptFrameSnapshot(
+                        offsetSeconds: elapsed,
+                        rms: frame.rms,
+                        soundingNotes: frame.soundingNotes.sorted().map(MIDINote.name),
+                        rawNotes: frame.rawNotes.sorted().map(MIDINote.name),
+                        onsets: frame.onsets.sorted().map(MIDINote.name),
+                        topPeaks: frame.topPeaks,
+                        evaluatedCandidates: frame.evaluatedCandidates
+                    )
+                )
             }
         }
         engine.ingest(frame)
@@ -235,12 +296,18 @@ final class PracticeSession {
     private func publish() {
         playhead = engine.playhead
         state = engine.state
-        waitingNotes = engine.waitingNotes
+        waitingNotes = showUpcomingStepHighlight ? engine.upcomingNotes : engine.waitingNotes
         latchedNotes = engine.latched
         stats = engine.stats
         progress = engine.progress
         stepStatuses = engine.stepStatuses
         microphone.setExpectedNotes(engine.notesForDetector)
+        if autoPanKeyboardToExpectedNotes, !waitingNotes.isEmpty {
+            let shifted = zoom.keyboard.ensuringVisible(waitingNotes)
+            if shifted != zoom.keyboard {
+                zoom.keyboard = shifted
+            }
+        }
         if state == .waiting, let step = engine.currentStepIndex, trackedStepIndex != step {
             if let prev = trackedStepIndex, prev < engine.stepStatuses.count, engine.stepStatuses[prev] == .completed {
                 recordStepDiagnostic(stepIndex: prev, outcome: "completed", latched: trackedStepLatched)
@@ -252,6 +319,9 @@ final class PracticeSession {
             trackedStepLatched.removeAll()
             trackedStepPeakRMS = 0
             trackedStepTopPeaks = []
+            trackedStepPeakCandidates = []
+            trackedStepAttemptFrames = []
+            microphone.clearRecentAudio()
         } else if state != .waiting, let prev = trackedStepIndex {
             if prev < engine.stepStatuses.count, engine.stepStatuses[prev] == .completed {
                 recordStepDiagnostic(stepIndex: prev, outcome: "completed", latched: trackedStepLatched)
@@ -270,25 +340,52 @@ final class PracticeSession {
         let latched = overrideLatched ?? engine.latched.union(trackedStepLatched)
         let missing = expected.subtracting(latched)
         let waited = max(0, Date().timeIntervalSince(trackedStepEnteredAt))
-        let diag = PracticeTelemetryLogger.StepDiagnostic(
-            stepIndex: stepIndex,
-            songTimeSeconds: step.timeSeconds,
-            waitedSeconds: waited,
-            outcome: outcome,
-            expectedNotes: expected.sorted().map(MIDINote.name),
-            latchedNotes: latched.sorted().map(MIDINote.name),
-            missingNotes: missing.sorted().map(MIDINote.name),
-            heardNotesDuringStep: trackedStepHeard.sorted().map(MIDINote.name),
-            rawNotesDuringStep: trackedStepRaw.sorted().map(MIDINote.name),
-            peakRMS: trackedStepPeakRMS,
-            tuningOffsetCents: tuningOffsetCents,
-            topPeaks: trackedStepTopPeaks
-        )
+        let shouldCaptureAudio = isSharingMicTelemetry
+            && (outcome == "skipped" || waited >= 1.5 || expected.count >= 2 || stepIndex % 8 == 0)
+        let audioSnapshot: (samples: [Float], sampleRate: Double) = shouldCaptureAudio
+            ? microphone.snapshotRecentAudio(maxSeconds: min(max(waited + 0.5, 1.5), 3.5))
+            : (samples: [], sampleRate: 0)
+        let stepSongTime = step.timeSeconds
+        let expectedNames = expected.sorted().map(MIDINote.name)
+        let latchedNames = latched.sorted().map(MIDINote.name)
+        let missingNames = missing.sorted().map(MIDINote.name)
+        let heardNames = trackedStepHeard.sorted().map(MIDINote.name)
+        let rawNames = trackedStepRaw.sorted().map(MIDINote.name)
+        let peakRMS = trackedStepPeakRMS
+        let tuning = tuningOffsetCents
+        let topPeaks = trackedStepTopPeaks
+        let peakCandidates = trackedStepPeakCandidates
+        let attemptFrames = trackedStepAttemptFrames
         let hands = "\(handSelection)"
         let gate = noiseGate
-        let tuning = tuningOffsetCents
         let currentStats = stats
         Task {
+            var snippetObject: String? = nil
+            if !audioSnapshot.samples.isEmpty {
+                snippetObject = await telemetry.uploadAudioSnippet(
+                    samples: audioSnapshot.samples,
+                    sampleRate: audioSnapshot.sampleRate,
+                    stepIndex: stepIndex,
+                    outcome: outcome
+                )
+            }
+            let diag = PracticeTelemetryLogger.StepDiagnostic(
+                stepIndex: stepIndex,
+                songTimeSeconds: stepSongTime,
+                waitedSeconds: waited,
+                outcome: outcome,
+                expectedNotes: expectedNames,
+                latchedNotes: latchedNames,
+                missingNotes: missingNames,
+                heardNotesDuringStep: heardNames,
+                rawNotesDuringStep: rawNames,
+                peakRMS: peakRMS,
+                tuningOffsetCents: tuning,
+                topPeaks: topPeaks,
+                peakEvaluatedCandidates: peakCandidates,
+                attemptFrames: attemptFrames,
+                audioSnippetObjectName: snippetObject
+            )
             await telemetry.record(diag)
             await telemetry.uploadSnapshot(
                 handSelection: hands,

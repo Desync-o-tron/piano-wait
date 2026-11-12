@@ -25,6 +25,10 @@ public final class MicrophoneInput: @unchecked Sendable {
     private let tracksLiveTuning: OSAllocatedUnfairLock<Bool>
     private let onsetRiseRatio: OSAllocatedUnfairLock<Float>
     private let onsetFallRatio: OSAllocatedUnfairLock<Float>
+    private let otaDSPOverride = OSAllocatedUnfairLock<OTAConfiguration.DSP?>(initialState: nil)
+    private let audioRingBuffer = OSAllocatedUnfairLock<(samples: [Float], sampleRate: Double)>(
+        initialState: ([], 44100)
+    )
 
     // Accessed only on `queue`.
     private let detector: AcousticPitchDetector
@@ -63,6 +67,30 @@ public final class MicrophoneInput: @unchecked Sendable {
     public func setOnsetSensitivity(riseRatio: Float, fallRatio: Float) {
         onsetRiseRatio.withLock { $0 = riseRatio }
         onsetFallRatio.withLock { $0 = fallRatio }
+    }
+
+    public func applyOTADSP(_ dsp: OTAConfiguration.DSP?) {
+        otaDSPOverride.withLock { $0 = dsp }
+        if let dsp {
+            if let v = dsp.noiseGateRMS { noiseGate.withLock { $0 = v } }
+            if let v = dsp.tracksLiveTuning { tracksLiveTuning.withLock { $0 = v } }
+            if let v = dsp.onsetRiseRatio { onsetRiseRatio.withLock { $0 = v } }
+            if let v = dsp.onsetFallRatio { onsetFallRatio.withLock { $0 = v } }
+        }
+    }
+
+    public func clearRecentAudio() {
+        audioRingBuffer.withLock { state in
+            state.samples.removeAll(keepingCapacity: true)
+        }
+    }
+
+    public func snapshotRecentAudio(maxSeconds: Double = 3.5) -> (samples: [Float], sampleRate: Double) {
+        audioRingBuffer.withLock { state in
+            let maxSamples = max(1, Int(state.sampleRate * maxSeconds))
+            let slice = state.samples.suffix(maxSamples)
+            return (Array(slice), state.sampleRate)
+        }
     }
 
     public func start(onFrame: @escaping FrameHandler) throws {
@@ -125,8 +153,19 @@ public final class MicrophoneInput: @unchecked Sendable {
     }
 
     private func process(_ samples: [Float], sampleRate: Double, onFrame: FrameHandler) {
+        audioRingBuffer.withLock { state in
+            state.sampleRate = sampleRate
+            state.samples.append(contentsOf: samples)
+            let maxSamples = max(44_100, Int(sampleRate * 4.0))
+            if state.samples.count > maxSamples {
+                state.samples.removeFirst(state.samples.count - maxSamples)
+            }
+        }
         let frames = assembler.append(samples)
         for frame in frames {
+            if let ota = otaDSPOverride.withLock({ $0 }) {
+                ota.apply(to: &detector.configuration)
+            }
             detector.configuration.noiseGateRMS = noiseGate.withLock { $0 }
             detector.configuration.tracksLiveTuning = tracksLiveTuning.withLock { $0 }
             detector.configuration.onsetRiseRatio = onsetRiseRatio.withLock { $0 }

@@ -1,18 +1,37 @@
+import PianoWaitCore
 import SwiftUI
 
-/// The live microphone level with an adjustable noise gate. The slider is logarithmic because
-/// useful gate levels span several orders of magnitude.
+/// The live microphone level with an adjustable noise gate and an opt-in toggle to share
+/// anonymized mic & note snippets for improving the acoustic piano pitch detector.
 struct MicrophoneControl: View {
     private static let gateRange: ClosedRange<Double> = -70 ... -20
 
     @Bindable var session: PracticeSession
     @State private var gateDecibels = -58.4
+    @State private var isShowingSettings = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: iconName)
-                .foregroundStyle(iconStyle)
-                .accessibilityLabel(statusLabel)
+            Button {
+                isShowingSettings = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: iconName)
+                        .foregroundStyle(iconStyle)
+                    if session.isSharingMicTelemetry {
+                        Image(systemName: "waveform.badge.plus")
+                            .font(.caption2)
+                            .foregroundStyle(.mint)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(statusLabel)
+            .accessibilityIdentifier("microphoneSettings")
+            .popover(isPresented: $isShowingSettings) {
+                MicrophoneSettingsPopover(session: session, gateDecibels: $gateDecibels)
+                    .presentationCompactAdaptation(.popover)
+            }
 
             VStack(spacing: 4) {
                 levelMeter
@@ -70,5 +89,40 @@ struct MicrophoneControl: View {
         case .denied: "Microphone access denied"
         case .unavailable(let reason): "Microphone unavailable: \(reason)"
         }
+    }
+}
+
+private struct MicrophoneSettingsPopover: View {
+    @Bindable var session: PracticeSession
+    @Binding var gateDecibels: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Microphone & Pitch AI")
+                .font(.headline)
+
+            Toggle(isOn: $session.isSharingMicTelemetry) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Help Improve Mic Detection")
+                        .font(.subheadline.weight(.medium))
+                    Text("Share anonymized piano audio snippets & note accuracy data so we can train a better microphone algorithm.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityIdentifier("shareMicTelemetryToggle")
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Noise Gate: \(Int(gateDecibels)) dB")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Slider(value: $gateDecibels, in: -70 ... -20)
+            }
+        }
+        .padding()
+        .frame(width: 290)
     }
 }

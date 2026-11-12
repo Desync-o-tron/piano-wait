@@ -183,3 +183,224 @@ public enum AdPlacementPolicy: Sendable {
         return true
     }
 }
+
+/// Live over-the-air (OTA) configuration fetched from `gs://<bucket>/config/ota-config.json`.
+///
+/// Every field is optional so a remote JSON payload only needs to specify the parameters it
+/// wants to override; unspecified fields fall back to the compiled defaults.
+public struct OTAConfiguration: Codable, Sendable, Equatable {
+    public struct DSP: Codable, Sendable, Equatable {
+        public var noiseGateRMS: Float?
+        public var requiredConsecutiveFrames: Int?
+        public var onsetRiseRatio: Float?
+        public var onsetFallRatio: Float?
+        public var referenceA4: Double?
+        public var tracksLiveTuning: Bool?
+        public var fundamentalRatio: Float?
+        public var supportRatio: Float?
+        public var minimumSalience: Float?
+        public var unexplainedShare: Float?
+        public var highOvertoneFundamentalMargin: Float?
+        public var requiredUnexplainedPartials: Int?
+
+        public init(
+            noiseGateRMS: Float? = nil,
+            requiredConsecutiveFrames: Int? = nil,
+            onsetRiseRatio: Float? = nil,
+            onsetFallRatio: Float? = nil,
+            referenceA4: Double? = nil,
+            tracksLiveTuning: Bool? = nil,
+            fundamentalRatio: Float? = nil,
+            supportRatio: Float? = nil,
+            minimumSalience: Float? = nil,
+            unexplainedShare: Float? = nil,
+            highOvertoneFundamentalMargin: Float? = nil,
+            requiredUnexplainedPartials: Int? = nil
+        ) {
+            self.noiseGateRMS = noiseGateRMS
+            self.requiredConsecutiveFrames = requiredConsecutiveFrames
+            self.onsetRiseRatio = onsetRiseRatio
+            self.onsetFallRatio = onsetFallRatio
+            self.referenceA4 = referenceA4
+            self.tracksLiveTuning = tracksLiveTuning
+            self.fundamentalRatio = fundamentalRatio
+            self.supportRatio = supportRatio
+            self.minimumSalience = minimumSalience
+            self.unexplainedShare = unexplainedShare
+            self.highOvertoneFundamentalMargin = highOvertoneFundamentalMargin
+            self.requiredUnexplainedPartials = requiredUnexplainedPartials
+        }
+
+        public func apply(to config: inout AcousticPitchDetector.Configuration) {
+            if let v = noiseGateRMS { config.noiseGateRMS = v }
+            if let v = requiredConsecutiveFrames { config.requiredConsecutiveFrames = v }
+            if let v = onsetRiseRatio { config.onsetRiseRatio = v }
+            if let v = onsetFallRatio { config.onsetFallRatio = v }
+            if let v = referenceA4 { config.referenceA4 = v }
+            if let v = tracksLiveTuning { config.tracksLiveTuning = v }
+            if let v = fundamentalRatio { config.fundamentalRatio = v }
+            if let v = supportRatio { config.supportRatio = v }
+            if let v = minimumSalience { config.minimumSalience = v }
+            if let v = unexplainedShare { config.unexplainedShare = v }
+            if let v = highOvertoneFundamentalMargin { config.highOvertoneFundamentalMargin = v }
+            if let v = requiredUnexplainedPartials { config.requiredUnexplainedPartials = v }
+        }
+    }
+
+    public struct Engine: Codable, Sendable, Equatable {
+        public var rollWindow: TimeInterval?
+        public var earlyGrace: TimeInterval?
+        public var strikeMemorySeconds: TimeInterval?
+        public var continuousWindow: TimeInterval?
+        public var synthEchoSuppression: TimeInterval?
+        public var partialChordGraceSeconds: TimeInterval?
+        public var highlightLeadTimeSeconds: TimeInterval?
+
+        public init(
+            rollWindow: TimeInterval? = nil,
+            earlyGrace: TimeInterval? = nil,
+            strikeMemorySeconds: TimeInterval? = nil,
+            continuousWindow: TimeInterval? = nil,
+            synthEchoSuppression: TimeInterval? = nil,
+            partialChordGraceSeconds: TimeInterval? = nil,
+            highlightLeadTimeSeconds: TimeInterval? = nil
+        ) {
+            self.rollWindow = rollWindow
+            self.earlyGrace = earlyGrace
+            self.strikeMemorySeconds = strikeMemorySeconds
+            self.continuousWindow = continuousWindow
+            self.synthEchoSuppression = synthEchoSuppression
+            self.partialChordGraceSeconds = partialChordGraceSeconds
+            self.highlightLeadTimeSeconds = highlightLeadTimeSeconds
+        }
+
+        public func apply(to config: inout WaitModeEngine.Configuration) {
+            if let v = rollWindow { config.rollWindow = v }
+            if let v = earlyGrace { config.earlyGrace = v }
+            if let v = strikeMemorySeconds { config.strikeMemorySeconds = v }
+            if let v = continuousWindow { config.continuousWindow = v }
+            if let v = synthEchoSuppression { config.synthEchoSuppression = v }
+            if let v = partialChordGraceSeconds { config.partialChordGraceSeconds = v }
+            if let v = highlightLeadTimeSeconds { config.highlightLeadTimeSeconds = v }
+        }
+    }
+
+    public struct UI: Codable, Sendable, Equatable {
+        public var autoPanKeyboardToExpectedNotes: Bool?
+        public var showUpcomingStepHighlight: Bool?
+
+        public init(
+            autoPanKeyboardToExpectedNotes: Bool? = nil,
+            showUpcomingStepHighlight: Bool? = nil
+        ) {
+            self.autoPanKeyboardToExpectedNotes = autoPanKeyboardToExpectedNotes
+            self.showUpcomingStepHighlight = showUpcomingStepHighlight
+        }
+    }
+
+    public struct Telemetry: Codable, Sendable, Equatable {
+        public var enabled: Bool?
+        public var flushStepInterval: Int?
+        public var uploadAudioSnippets: Bool?
+        public var telemetryBucket: String?
+
+        public init(
+            enabled: Bool? = nil,
+            flushStepInterval: Int? = nil,
+            uploadAudioSnippets: Bool? = nil,
+            telemetryBucket: String? = nil
+        ) {
+            self.enabled = enabled
+            self.flushStepInterval = flushStepInterval
+            self.uploadAudioSnippets = uploadAudioSnippets
+            self.telemetryBucket = telemetryBucket
+        }
+    }
+
+    public static let defaultRemoteObjectPath = "config/ota-config.json"
+
+    public var version: Int
+    public var updatedAt: String?
+    public var dsp: DSP?
+    public var engine: Engine?
+    public var ui: UI?
+    public var telemetry: Telemetry?
+
+    public init(
+        version: Int = 1,
+        updatedAt: String? = nil,
+        dsp: DSP? = nil,
+        engine: Engine? = nil,
+        ui: UI? = nil,
+        telemetry: Telemetry? = nil
+    ) {
+        self.version = version
+        self.updatedAt = updatedAt
+        self.dsp = dsp
+        self.engine = engine
+        self.ui = ui
+        self.telemetry = telemetry
+    }
+}
+
+/// Fetches and caches `OTAConfiguration` from the Google Cloud Storage bucket so DSP, engine,
+/// and UI parameters can be tuned over the air without waiting for App Store / Play Store review.
+public actor RemoteConfigLoader {
+    public static let shared = RemoteConfigLoader()
+
+    public nonisolated let bucket: String
+    public nonisolated let objectPath: String
+    public nonisolated let cacheFileURL: URL
+    private let session: URLSession
+    private var cachedConfig: OTAConfiguration?
+
+    public init(
+        bucket: String = CloudBucketClient.defaultBucket,
+        objectPath: String = OTAConfiguration.defaultRemoteObjectPath,
+        cacheDirectory: URL = URL.documentsDirectory.appendingPathComponent("Config", isDirectory: true),
+        session: URLSession = .shared
+    ) {
+        self.bucket = bucket
+        self.objectPath = objectPath
+        self.cacheFileURL = cacheDirectory.appendingPathComponent("ota-config.json", isDirectory: false)
+        self.session = session
+        if let data = try? Data(contentsOf: cacheFileURL),
+           let decoded = try? JSONDecoder().decode(OTAConfiguration.self, from: data) {
+            self.cachedConfig = decoded
+        }
+    }
+
+    public var remoteURL: URL? {
+        let trimmed = bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return URL(string: "https://storage.googleapis.com/\(trimmed)/\(objectPath)")
+    }
+
+    public func currentConfiguration() -> OTAConfiguration {
+        cachedConfig ?? OTAConfiguration()
+    }
+
+    @discardableResult
+    public func refresh() async -> OTAConfiguration {
+        guard let url = remoteURL else {
+            return currentConfiguration()
+        }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 8
+        do {
+            let (data, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return currentConfiguration()
+            }
+            let decoded = try JSONDecoder().decode(OTAConfiguration.self, from: data)
+            cachedConfig = decoded
+            let dir = cacheFileURL.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: cacheFileURL, options: .atomic)
+            return decoded
+        } catch {
+            return currentConfiguration()
+        }
+    }
+}

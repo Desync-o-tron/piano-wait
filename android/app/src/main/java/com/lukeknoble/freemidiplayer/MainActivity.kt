@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import com.lukeknoble.freemidiplayer.ads.AdManager
 import com.lukeknoble.freemidiplayer.audio.HardwareMidiController
 import com.lukeknoble.freemidiplayer.audio.PianoSynth
+import com.lukeknoble.freemidiplayer.config.RemoteConfigLoader
 import com.lukeknoble.freemidiplayer.engine.AdPlacementPolicy
 import com.lukeknoble.freemidiplayer.engine.HandSelection
 import com.lukeknoble.freemidiplayer.engine.PlaybackMode
@@ -40,6 +41,7 @@ import com.lukeknoble.freemidiplayer.midi.LibrarySongItem
 import com.lukeknoble.freemidiplayer.midi.MidiNote
 import com.lukeknoble.freemidiplayer.midi.MidiParser
 import com.lukeknoble.freemidiplayer.midi.MidiSong
+import com.lukeknoble.freemidiplayer.telemetry.PracticeTelemetryLogger
 import com.lukeknoble.freemidiplayer.ui.FallingNotesView
 import com.lukeknoble.freemidiplayer.ui.PianoKeyboardView
 import java.io.File
@@ -54,8 +56,14 @@ class MainActivity : AppCompatActivity() {
 
     private var activeEngine: WaitModeEngine? = null
     private var activeZoom: PracticeZoom? = null
+    private var activeTelemetry: PracticeTelemetryLogger? = null
     private var fallingNotesView: FallingNotesView? = null
     private var keyboardView: PianoKeyboardView? = null
+    private var trackedStepIndex: Int? = null
+    private var trackedStepEnteredAtMs: Long = 0L
+    private val trackedStepHeard = mutableSetOf<Int>()
+    private val trackedStepLatched = mutableSetOf<Int>()
+    private var trackedStepPeakRms: Float = 0f
 
     private var statusPromptView: TextView? = null
     private var statusMetricsView: TextView? = null
@@ -72,8 +80,16 @@ class MainActivity : AppCompatActivity() {
     private var loopEndMarker: Double? = null
     private var lastFrameNanos: Long = 0L
     private var wasFinishedNotified = false
+    private var autoPanKeyboardToExpectedNotes = true
+    private var showUpcomingStepHighlight = true
 
     private val builtInSongs = listOf(
+        LibrarySongItem(
+            id = "dark-is-the-night",
+            title = "Dark Is the Night",
+            composer = "Nikita Bogoslovsky",
+            assetFileName = "songs/dark_is_the_night.mid"
+        ),
         LibrarySongItem(
             id = "ode-to-joy",
             title = "Ode to Joy",
@@ -137,6 +153,7 @@ class MainActivity : AppCompatActivity() {
         if (granted) {
             hardwareMidi?.startMicrophone()
             updateControlLabels()
+            maybePromptTelemetryOptIn()
         } else {
             Toast.makeText(
                 this,
@@ -158,6 +175,22 @@ class MainActivity : AppCompatActivity() {
 
             val events = engine.tick(dt)
             handlePracticeEvents(events, engine)
+            updateTelemetryTracking(engine)
+
+            if (autoPanKeyboardToExpectedNotes) {
+                val targetNotes = if (engine.waitingNotes.isNotEmpty()) {
+                    engine.waitingNotes
+                } else if (showUpcomingStepHighlight) {
+                    engine.upcomingNotes
+                } else {
+                    emptySet()
+                }
+                if (targetNotes.isNotEmpty()) {
+                    activeZoom?.let { zoom ->
+                        zoom.keyboard = zoom.keyboard.ensuringVisible(targetNotes)
+                    }
+                }
+            }
 
             fallingNotesView?.invalidate()
             keyboardView?.invalidate()
@@ -189,6 +222,11 @@ class MainActivity : AppCompatActivity() {
             },
             onMicNotesDetected = { detected ->
                 keyboardView?.heardNotes = detected
+                if (activeEngine?.state == PlaybackState.WAITING) {
+                    trackedStepHeard.addAll(detected)
+                    val rms = hardwareMidi?.latestMicRms ?: 0f
+                    if (rms > trackedStepPeakRms) trackedStepPeakRms = rms
+                }
                 activeEngine?.ingest(heard = detected, onsets = detected, matchedExpected = detected)
                 keyboardView?.invalidate()
                 fallingNotesView?.invalidate()
@@ -320,6 +358,9 @@ class MainActivity : AppCompatActivity() {
                 listLayout.addView(makeSongCard(item))
             }
         }
+
+        listLayout.addView(makeSectionHeader("MICROPHONE AI IMPROVEMENT"))
+        listLayout.addView(makeTelemetryOptInCard())
 
         scroll.addView(listLayout)
         page.addView(scroll)
@@ -477,9 +518,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         val engine = WaitModeEngine(song = song, mode = PlaybackMode.WAIT_FOR_ME)
+        RemoteConfigLoader.latest.applyTo(engine.configuration)
         val zoom = PracticeZoom(song = song)
+        val telemetry = PracticeTelemetryLogger(this, songTitle = song.title)
         activeEngine = engine
         activeZoom = zoom
+        activeTelemetry = telemetry
+        trackedStepIndex = null
+        RemoteConfigLoader.refreshAsync(this) { ota ->
+            ota.applyTo(engine.configuration)
+            ota.autoPanKeyboardToExpectedNotes?.let { autoPanKeyboardToExpectedNotes = it }
+            ota.showUpcomingStepHighlight?.let { showUpcomingStepHighlight = it }
+            ota.telemetryEnabled?.let { telemetry.isOtaEnabled = it }
+            ota.telemetryFlushStepInterval?.let { if (it >= 1) telemetry.flushStepInterval = it }
+            ota.telemetryUploadAudioSnippets?.let { telemetry.isAudioUploadEnabled = it }
+            ota.telemetryBucket?.let { if (it.isNotBlank()) telemetry.bucket = it }
+        }
         loopStartMarker = null
         loopEndMarker = null
         wasFinishedNotified = false
@@ -535,6 +589,9 @@ class MainActivity : AppCompatActivity() {
         addSpacer(controlRow, 6)
 
         skipButton = makePillButton("⏭ Skip") {
+            engine.currentStepIndex?.let { stepIdx ->
+                recordAndroidStepDiagnostic(engine, stepIdx, "skipped")
+            }
             engine.skipStep()
             handlePracticeEvents(engine.drainEvents(), engine)
             updateControlLabels()
@@ -682,6 +739,11 @@ class MainActivity : AppCompatActivity() {
                 is PracticeEvent.Looped -> {
                 }
                 is PracticeEvent.Finished -> {
+                    activeTelemetry?.let { tel ->
+                        Thread {
+                            tel.uploadSnapshotSync(engine.handSelection.label, engine.stats, force = true)
+                        }.start()
+                    }
                     AdManager.updatePlaybackState(PlaybackState.FINISHED)
                     if (!wasFinishedNotified) {
                         wasFinishedNotified = true
@@ -909,9 +971,130 @@ class MainActivity : AppCompatActivity() {
         ) {
             hw.startMicrophone()
             updateControlLabels()
+            maybePromptTelemetryOptIn()
         } else {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private fun makeTelemetryOptInCard(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = roundedBg(Color.rgb(20, 27, 45), dp(12), Color.argb(60, 46, 242, 173))
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            lp.bottomMargin = dp(12)
+            layoutParams = lp
+        }
+
+        val infoCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        infoCol.addView(TextView(this).apply {
+            text = "Help Improve Microphone Pitch Detection"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        infoCol.addView(TextView(this).apply {
+            text = "Share anonymized piano audio snippets & note accuracy data while practicing so we can train a better microphone algorithm."
+            setTextColor(Color.rgb(160, 180, 215))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setPadding(0, dp(3), dp(10), 0)
+        })
+        card.addView(infoCol)
+
+        val optedIn = PracticeTelemetryLogger.isUserOptedIn(this)
+        val toggleBtn = makePillButton(
+            label = if (optedIn) "Sharing: ON" else "Opt In",
+            accent = optedIn
+        ) {
+            val next = !PracticeTelemetryLogger.isUserOptedIn(this)
+            PracticeTelemetryLogger.setUserOptedIn(this, next)
+            showLibraryScreen()
+        }
+        card.addView(toggleBtn)
+        return card
+    }
+
+    private fun maybePromptTelemetryOptIn() {
+        if (PracticeTelemetryLogger.hasPromptedUser(this)) return
+        AlertDialog.Builder(this)
+            .setTitle("Help Improve Mic Detection?")
+            .setMessage("Would you like to share short anonymized piano audio snippets and note accuracy data while practicing so we can make a better microphone pitch algorithm?")
+            .setPositiveButton("Share & Help Improve") { _, _ ->
+                PracticeTelemetryLogger.setUserOptedIn(this, true)
+                Toast.makeText(this, "Thanks! Mic telemetry sharing enabled.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Not Now") { _, _ ->
+                PracticeTelemetryLogger.setUserOptedIn(this, false)
+            }
+            .show()
+    }
+
+    private fun updateTelemetryTracking(engine: WaitModeEngine) {
+        if (engine.state == PlaybackState.WAITING) {
+            val step = engine.currentStepIndex
+            if (step != null && trackedStepIndex != step) {
+                val prev = trackedStepIndex
+                if (prev != null && prev < engine.stepStatuses.size) {
+                    recordAndroidStepDiagnostic(engine, prev, "completed", trackedStepLatched.toSet())
+                }
+                trackedStepIndex = step
+                trackedStepEnteredAtMs = System.currentTimeMillis()
+                trackedStepHeard.clear()
+                trackedStepLatched.clear()
+                trackedStepPeakRms = 0f
+                hardwareMidi?.clearRecentAudio()
+            }
+            trackedStepLatched.addAll(engine.latched)
+        } else {
+            val prev = trackedStepIndex
+            if (prev != null && prev < engine.stepStatuses.size) {
+                recordAndroidStepDiagnostic(engine, prev, "completed", trackedStepLatched.toSet())
+            }
+            trackedStepIndex = null
+        }
+    }
+
+    private fun recordAndroidStepDiagnostic(
+        engine: WaitModeEngine,
+        stepIndex: Int,
+        outcome: String,
+        overrideLatched: Set<Int>? = null
+    ) {
+        val tel = activeTelemetry ?: return
+        if (stepIndex < 0 || stepIndex >= engine.song.steps.size) return
+        val step = engine.song.steps[stepIndex]
+        val expected = step.pitches(engine.handSelection)
+        val latched = overrideLatched ?: (engine.latched + trackedStepLatched)
+        val waitedSec = ((System.currentTimeMillis() - trackedStepEnteredAtMs).coerceAtLeast(0L)) / 1000.0
+        val shouldCaptureAudio = PracticeTelemetryLogger.isUserOptedIn(this) &&
+            hardwareMidi?.isMicActive == true &&
+            (outcome == "skipped" || waitedSec >= 1.5 || expected.size >= 2 || stepIndex % 8 == 0)
+        val audioSamples = if (shouldCaptureAudio) {
+            hardwareMidi?.snapshotRecentAudio((waitedSec + 0.5).coerceIn(1.5, 3.5))
+        } else {
+            null
+        }
+        tel.recordAndUploadAsync(
+            stepIndex = stepIndex,
+            songTimeSeconds = step.timeSeconds,
+            waitedSeconds = waitedSec,
+            outcome = outcome,
+            expectedNotes = expected,
+            latchedNotes = latched,
+            heardNotes = trackedStepHeard.toSet(),
+            peakRms = trackedStepPeakRms,
+            handSelection = engine.handSelection.label,
+            stats = engine.stats,
+            audioSamples = audioSamples
+        )
     }
 
     // =========================================================================

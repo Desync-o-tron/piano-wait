@@ -443,8 +443,8 @@ final class MIDIParserTests: XCTestCase {
     // MARK: - Built-in songs
 
     func testBuiltInSongsParse() throws {
-        XCTAssertEqual(BuiltInSongs.all.count, 3)
-        XCTAssertEqual(BuiltInSongs.all.first?.id, BuiltInSongs.odeToJoy.id)
+        XCTAssertEqual(BuiltInSongs.all.count, 4)
+        XCTAssertEqual(BuiltInSongs.all.first?.id, BuiltInSongs.darkIsTheNight.id)
         for builtIn in BuiltInSongs.sampleFiles {
             let song = try builtIn.parsed()
             XCTAssertEqual(song.title, builtIn.title)

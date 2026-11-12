@@ -15,13 +15,14 @@ class WaitModeEngine(
     val configuration: Configuration = Configuration()
 ) {
     data class Configuration(
-        val rollWindow: Double = 0.6,
-        val strikeMemorySeconds: Double? = null,
-        val earlyGrace: Double = 0.25,
-        val continuousWindow: Double = 0.25,
-        val leadIn: Double = 0.0,
-        val synthEchoSuppression: Double = 1.0,
-        val partialChordGraceSeconds: Double? = null
+        var rollWindow: Double = 0.6,
+        var strikeMemorySeconds: Double? = null,
+        var earlyGrace: Double = 0.25,
+        var continuousWindow: Double = 0.25,
+        var leadIn: Double = 0.0,
+        var synthEchoSuppression: Double = 1.0,
+        var partialChordGraceSeconds: Double? = null,
+        var highlightLeadTimeSeconds: Double = 1.5
     )
 
     companion object {
@@ -53,6 +54,7 @@ class WaitModeEngine(
     private var clock: Double = 0.0
     private val pendingEvents = mutableListOf<PracticeEvent>()
     private var previouslyHeard = emptySet<Int>()
+    private var activeNotesAtStepStart = emptySet<Int>()
     private val armedNotes = mutableMapOf<Int, Double>()
     private val latchedNotes = mutableMapOf<Int, Double>()
     private val continuousHits = mutableMapOf<Int, MutableSet<Int>>()
@@ -71,6 +73,29 @@ class WaitModeEngine(
             }
             return if (cursor < song.steps.size) expectedNotes(cursor) else emptySet()
         }
+
+    val upcomingNotes: Set<Int>
+        get() {
+            if (state == PlaybackState.WAITING || (state == PlaybackState.PAUSED && isAtCurrentStep)) {
+                return waitingNotes
+            }
+            if (state != PlaybackState.PLAYING && state != PlaybackState.PAUSED) {
+                return emptySet()
+            }
+            val nextIdx = nextNonEmptyStepIndex(cursor) ?: return emptySet()
+            val dt = song.steps[nextIdx].timeSeconds - playhead
+            val leadTime = max(configuration.highlightLeadTimeSeconds, 0.25) * max(speed, 0.5)
+            return if (dt <= leadTime) expectedNotes(nextIdx) else emptySet()
+        }
+
+    private fun nextNonEmptyStepIndex(startIndex: Int): Int? {
+        var idx = max(0, startIndex)
+        while (idx < song.steps.size) {
+            if (expectedNotes(idx).isNotEmpty()) return idx
+            idx += 1
+        }
+        return null
+    }
 
     val latched: Set<Int>
         get() = latchedNotes.keys.toSet()
@@ -200,13 +225,16 @@ class WaitModeEngine(
         var fresh = heard.minus(previouslyHeard).union(onsets.intersect(heard))
         if (mode == PlaybackMode.WAIT_FOR_ME && state == PlaybackState.WAITING && cursor < song.steps.size) {
             val expected = expectedNotes(cursor)
-            if (expected.size >= 2) {
-                val chordPresent = matchedExpected.intersect(expected).minus(latchedNotes.keys)
+            if (expected.size >= 2 && latchedNotes.isNotEmpty()) {
+                val chordPresent = matchedExpected.intersect(expected)
+                    .minus(latchedNotes.keys)
+                    .minus(activeNotesAtStepStart)
                 fresh = fresh.union(chordPresent)
             }
         }
         fresh = fresh.filterTo(linkedSetOf()) { (echoSuppressedUntil[it] ?: Double.NEGATIVE_INFINITY) <= clock }
         previouslyHeard = heard
+        activeNotesAtStepStart = activeNotesAtStepStart.intersect(heard)
 
         val toRemove = mutableListOf<Int>()
         for ((note, struckAt) in armedNotes) {
@@ -301,6 +329,7 @@ class WaitModeEngine(
             PlaybackMode.WAIT_FOR_ME -> {
                 state = PlaybackState.WAITING
                 latchedNotes.clear()
+                activeNotesAtStepStart = previouslyHeard
                 consumeArmedNotes()
             }
         }

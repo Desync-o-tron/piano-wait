@@ -267,8 +267,8 @@ final class CloudBucketClientTests: XCTestCase {
             imported: [URL(fileURLWithPath: "/tmp/mine.mid")]
         )
 
-        XCTAssertEqual(songs.filter { $0.availability == .builtIn }.count, 3)
-        XCTAssertEqual(songs.first?.title, "Ode to Joy")
+        XCTAssertEqual(songs.filter { $0.availability == .builtIn }.count, 4)
+        XCTAssertEqual(songs.first?.title, "Dark Is the Night")
         XCTAssertEqual(songs.first { $0.title == "Zebra" }?.availability, .cached)
         XCTAssertEqual(songs.first { $0.title == "Stale" }?.availability, .inCloud)
         XCTAssertEqual(songs.first { $0.title == "Apple Pie" }?.availability, .inCloud)

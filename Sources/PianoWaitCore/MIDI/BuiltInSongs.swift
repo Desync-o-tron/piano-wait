@@ -15,7 +15,7 @@ public struct BuiltInSong: Sendable, Identifiable, Hashable {
 /// Starter songs embedded in the app or generated from note lists, so it works before its first sync.
 public enum BuiltInSongs {
     /// Songs bundled in the app.
-    public static let all: [BuiltInSong] = [odeToJoy, minuetInG, furElise]
+    public static let all: [BuiltInSong] = [darkIsTheNight, odeToJoy, minuetInG, furElise]
 
     /// Everything in `samples/`: the bundled songs plus extra files for the cloud bucket.
     public static let sampleFiles: [BuiltInSong] = all + [twinkle, chordDrill]

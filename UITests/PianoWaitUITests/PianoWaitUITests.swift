@@ -37,7 +37,7 @@ final class PianoWaitUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["free MIDI player (FOSS)"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.otherElements["adBannerView"].waitForExistence(timeout: 10))
 
-        for title in ["Ode to Joy", "Minuet in G", "Für Elise (Opening)"] {
+        for title in ["Dark Is the Night", "Ode to Joy", "Minuet in G", "Für Elise (Opening)"] {
             XCTAssertTrue(app.buttons["song-\(title)"].waitForExistence(timeout: 15), title)
         }
         attachScreenshot("Library")

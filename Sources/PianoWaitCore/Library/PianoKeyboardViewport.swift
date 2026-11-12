@@ -51,6 +51,32 @@ public struct PianoKeyboardViewport: Sendable, Equatable {
         return first...last
     }
 
+    /// Returns a viewport shifted horizontally (with the same `width`) so that all `notes` are
+    /// comfortably visible on screen. If `notes` are already visible or empty, returns `self`.
+    public func ensuringVisible(_ notes: Set<UInt8>) -> PianoKeyboardViewport {
+        guard !notes.isEmpty, width < 1 - Self.tolerance else { return self }
+        let frames = notes.compactMap { layout.frame(for: $0) }
+        guard let minX = frames.map(\.x).min(),
+              let maxX = frames.map({ $0.x + $0.width }).max()
+        else { return self }
+
+        let margin = min(layout.whiteKeyWidth * 0.5, width * 0.08)
+        let desiredMin = max(0, minX - margin)
+        let desiredMax = min(1, maxX + margin)
+
+        if desiredMin >= start && desiredMax <= start + width {
+            return self
+        }
+        if desiredMax - desiredMin > width {
+            let center = (minX + maxX) / 2
+            return PianoKeyboardViewport(layout: layout, start: center - width / 2, width: width)
+        }
+        if desiredMin < start {
+            return PianoKeyboardViewport(layout: layout, start: desiredMin, width: width)
+        }
+        return PianoKeyboardViewport(layout: layout, start: desiredMax - width, width: width)
+    }
+
     /// Scales by `factor`, where above 1 zooms in, holding still the point at `anchor` in the view.
     public func zoomed(by factor: Double, anchor: Double = 0.5) -> PianoKeyboardViewport {
         guard factor > 0, factor.isFinite else { return self }

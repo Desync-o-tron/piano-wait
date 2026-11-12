@@ -7,6 +7,7 @@ struct LibraryView: View {
     @State private var isImporting = false
     @State private var activeSong: PracticeSong?
     @State private var openingSongID: LibrarySong.ID?
+    @State private var shareMicTelemetry = PracticeTelemetryLogger.isUserOptedIn
 
     var body: some View {
         @Bindable var library = library
@@ -24,6 +25,22 @@ struct LibraryView: View {
                 }
                 if !library.importedSongs.isEmpty {
                     section("Imported", songs: library.importedSongs)
+                }
+
+                Section("Microphone AI Improvement") {
+                    Toggle(isOn: $shareMicTelemetry) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Share Mic Audio to Improve Pitch Detection")
+                                .font(.subheadline.weight(.medium))
+                            Text("Opt in to share short piano audio snippets & note accuracy data while practicing so we can build a better microphone algorithm.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: shareMicTelemetry) { _, newValue in
+                        PracticeTelemetryLogger.isUserOptedIn = newValue
+                    }
+                    .accessibilityIdentifier("libraryShareMicTelemetryToggle")
                 }
             }
             .navigationTitle(AppConfiguration.current.displayName)

@@ -19,6 +19,9 @@ public final class WaitModeEngine {
         /// When non-nil, a chord that has latched all but one note (with at least 75% or 2+ notes
         /// matched) completes after waiting this long since the last matched note was latched.
         public var partialChordGraceSeconds: TimeInterval? = nil
+        /// How far ahead of the next step (in song seconds) `upcomingNotes` reports the next
+        /// expected notes while playing between steps.
+        public var highlightLeadTimeSeconds: TimeInterval = 1.5
 
         public init() {}
     }
@@ -27,7 +30,7 @@ public final class WaitModeEngine {
     public static let speedPresets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
 
     public let song: MIDISong
-    public let configuration: Configuration
+    public var configuration: Configuration
 
     public private(set) var playhead: TimeInterval
     public private(set) var state: PlaybackState = .paused
@@ -49,6 +52,9 @@ public final class WaitModeEngine {
     private var clock: TimeInterval = 0
     private var pendingEvents: [PracticeEvent] = []
     private var previouslyHeard = Set<UInt8>()
+    /// Notes that were already sounding at the moment the engine arrived at the current step
+    /// and have not yet ceased sounding during this step.
+    private var activeNotesAtStepStart = Set<UInt8>()
     /// When each note was last freshly struck, until a step uses that strike or the note stops.
     private var armedNotes: [UInt8: TimeInterval] = [:]
     private var latchedNotes: [UInt8: TimeInterval] = [:]
@@ -75,17 +81,31 @@ public final class WaitModeEngine {
         return expectedNotes(forStep: cursor)
     }
 
+    /// The notes to highlight on the keyboard right now: `waitingNotes` when waiting, or the
+    /// next step's expected notes for `handSelection` when playing within `highlightLeadTimeSeconds`.
+    public var upcomingNotes: Set<UInt8> {
+        if state == .waiting || (state == .paused && isAtCurrentStep) {
+            return expectedNotes(forStep: cursor)
+        }
+        guard state == .playing, let idx = nextNonEmptyStepIndex(from: cursor) else { return [] }
+        let dt = song.steps[idx].timeSeconds - playhead
+        guard dt <= configuration.highlightLeadTimeSeconds else { return [] }
+        return expectedNotes(forStep: idx)
+    }
+
     public var latched: Set<UInt8> { Set(latchedNotes.keys) }
 
     /// The notes the microphone detector should be looking for right now.
     public var notesForDetector: Set<UInt8> {
         switch mode {
         case .waitForMe:
-            let notes = cursor < song.steps.count ? expectedNotes(forStep: cursor) : []
-            guard cursor + 1 < song.steps.count,
-                  song.steps[cursor + 1].timeSeconds - playhead <= max(configuration.earlyGrace, configuration.strikeMemorySeconds ?? 0)
+            guard let firstIdx = nextNonEmptyStepIndex(from: cursor) else { return [] }
+            let notes = expectedNotes(forStep: firstIdx)
+            let window = max(configuration.earlyGrace, configuration.strikeMemorySeconds ?? 0)
+            guard let secondIdx = nextNonEmptyStepIndex(from: firstIdx + 1),
+                  song.steps[secondIdx].timeSeconds - playhead <= window
             else { return notes }
-            return notes.union(expectedNotes(forStep: cursor + 1))
+            return notes.union(expectedNotes(forStep: secondIdx))
         case .continuous:
             var notes = Set<UInt8>()
             for index in scoringStepIndices() {
@@ -107,6 +127,16 @@ public final class WaitModeEngine {
 
     private func expectedNotes(forStep index: Int) -> Set<UInt8> {
         song.steps[index].pitches(for: handSelection)
+    }
+
+    private func nextNonEmptyStepIndex(from startIndex: Int) -> Int? {
+        guard startIndex < song.steps.count else { return nil }
+        for idx in startIndex..<song.steps.count {
+            if !expectedNotes(forStep: idx).isEmpty {
+                return idx
+            }
+        }
+        return nil
     }
 
     // MARK: - Transport
@@ -250,10 +280,14 @@ public final class WaitModeEngine {
         guard state != .finished else { return }
 
         var fresh = heard.subtracting(previouslyHeard).union(onsets.intersection(heard))
+        activeNotesAtStepStart.formIntersection(heard)
+        activeNotesAtStepStart.subtract(fresh)
         if mode == .waitForMe, state == .waiting, cursor < song.steps.count {
             let expected = expectedNotes(forStep: cursor)
-            if expected.count >= 2 {
-                let chordPresent = matchedExpected.intersection(expected).subtracting(latchedNotes.keys)
+            if expected.count >= 2, !latchedNotes.isEmpty {
+                let chordPresent = matchedExpected.intersection(expected)
+                    .subtracting(latchedNotes.keys)
+                    .subtracting(activeNotesAtStepStart)
                 fresh.formUnion(chordPresent)
             }
         }
@@ -350,6 +384,7 @@ public final class WaitModeEngine {
         case .waitForMe:
             state = .waiting
             latchedNotes.removeAll()
+            activeNotesAtStepStart = previouslyHeard
             consumeArmedNotes()
         }
     }
@@ -361,7 +396,9 @@ public final class WaitModeEngine {
         switch mode {
         case .waitForMe:
             armedNotes = armedNotes.filter { !expectedNotes(forStep: cursor).contains($0.key) }
-            match(armed: Set(recent.keys).intersection(expectedNotes(forStep: cursor)))
+            let matchedEarly = Set(recent.keys).intersection(expectedNotes(forStep: cursor))
+            activeNotesAtStepStart.subtract(matchedEarly)
+            match(armed: matchedEarly)
         case .continuous:
             matchContinuous(fresh: Set(recent.keys), wrongCandidates: [])
         }
@@ -503,6 +540,7 @@ public final class WaitModeEngine {
         latchedNotes.removeAll()
         armedNotes.removeAll()
         continuousHits.removeAll()
+        activeNotesAtStepStart.removeAll()
     }
 
     private func firstStepIndex(atOrAfter seconds: TimeInterval) -> Int {

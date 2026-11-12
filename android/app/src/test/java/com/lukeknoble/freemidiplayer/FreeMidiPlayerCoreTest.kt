@@ -44,6 +44,7 @@ class FreeMidiPlayerCoreTest {
     @Test
     fun bundledClassicalMidiSongsParseCleanly() {
         val files = listOf(
+            "dark_is_the_night.mid",
             "ode_to_joy.mid",
             "minuet_in_g.mid",
             "fur_elise_opening.mid",

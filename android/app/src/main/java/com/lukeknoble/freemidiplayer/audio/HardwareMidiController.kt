@@ -40,6 +40,35 @@ class HardwareMidiController(
     private val openPorts = mutableListOf<MidiOutputPort>()
     private val micRunning = AtomicBoolean(false)
     private var micThread: Thread? = null
+    private val ringBufferLock = Any()
+    private val ringBufferMaxSamples = 22_050 * 4
+    private var ringBuffer = ShortArray(ringBufferMaxSamples)
+    private var ringBufferWritePos = 0
+    private var ringBufferCount = 0
+
+    @Volatile
+    var latestMicRms: Float = 0f
+        private set
+
+    fun clearRecentAudio() {
+        synchronized(ringBufferLock) {
+            ringBufferWritePos = 0
+            ringBufferCount = 0
+        }
+    }
+
+    fun snapshotRecentAudio(maxSeconds: Double = 3.5): ShortArray {
+        synchronized(ringBufferLock) {
+            if (ringBufferCount == 0) return ShortArray(0)
+            val want = (22_050 * maxSeconds).toInt().coerceIn(1, ringBufferCount)
+            val out = ShortArray(want)
+            val start = (ringBufferWritePos - want + ringBufferMaxSamples) % ringBufferMaxSamples
+            for (i in 0 until want) {
+                out[i] = ringBuffer[(start + i) % ringBufferMaxSamples]
+            }
+            return out
+        }
+    }
 
     private val deviceCallback = object : MidiManager.DeviceCallback() {
         override fun onDeviceAdded(device: MidiDeviceInfo) {
@@ -200,6 +229,15 @@ class HardwareMidiController(
                 while (micRunning.get()) {
                     val read = recorder.read(shortBuf, 0, frameSize)
                     if (read == frameSize) {
+                        synchronized(ringBufferLock) {
+                            for (idx in 0 until frameSize) {
+                                ringBuffer[ringBufferWritePos] = shortBuf[idx]
+                                ringBufferWritePos = (ringBufferWritePos + 1) % ringBufferMaxSamples
+                                if (ringBufferCount < ringBufferMaxSamples) {
+                                    ringBufferCount += 1
+                                }
+                            }
+                        }
                         var energy = 0.0
                         for (idx in 0 until frameSize) {
                             val v = shortBuf[idx] / 32768f
@@ -207,6 +245,7 @@ class HardwareMidiController(
                             energy += v * v
                         }
                         val rms = sqrt(energy / frameSize)
+                        latestMicRms = rms.toFloat()
                         val detected = if (rms > 0.015) {
                             detectDominantNotes(floatBuf, sampleRate)
                         } else {

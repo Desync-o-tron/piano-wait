@@ -12,6 +12,10 @@ struct HarmonicNoteEvaluator {
         /// The note stands on its own. Otherwise its partials are mostly shared with other notes,
         /// but it has more energy than they explain, which is enough only if the song expects it.
         let isUnambiguous: Bool
+        let partialEnergies: [Float]
+        let supportCount: Int
+        let unexplainedPartialsCount: Int
+        let exceedsOvertonePrediction: Bool
     }
 
     /// Partials that count as evidence for a note.
@@ -42,13 +46,45 @@ struct HarmonicNoteEvaluator {
     private static let tightGhostMargin: Float = 1.6
     /// A partial is unexplained when this share of it exceeds what other notes predict.
     private static let unexplainedShare: Float = 0.25
+    /// Headroom multiplier on the fundamental of an upper note sitting on a high overtone (>= 3)
+    /// of a lower note (e.g., G4 on the 4th harmonic of G2, or E4 on the 6th harmonic of G2)
+    /// when the intermediate octave is NOT sounding.
+    private static let highOvertoneFundamentalMargin: Float = 1.6
     /// A real note shows up in several partials of its own. One stray partial is more likely an
     /// overtone of another chord note landing within tolerance.
     private static let requiredUnexplainedPartials = 2
 
+    /// Minimum fundamental-to-strongest ratio for mid-range notes (>= 100 Hz).
+    public var fundamentalRatio: Float = 0.1
+    /// Minimum partial-to-strongest ratio for a partial to count as support.
+    public var supportRatio: Float = 0.03
+    /// Minimum note-strongest-to-frame-strongest salience ratio.
+    public var minimumSalience: Float = 0.06
+    /// Share of a partial's amplitude that must exceed overtone predictions to count as unexplained.
+    public var unexplainedShare: Float = 0.25
+    /// Headroom multiplier on the fundamental of an upper note sitting on a high overtone (>= 3)
+    /// when the intermediate octave is not sounding.
+    public var highOvertoneFundamentalMargin: Float = 1.6
+    /// Number of unexplained partials required for a note to stand on its own as unambiguous.
+    public var requiredUnexplainedPartials: Int = 2
+
     private let partialFrequencies: [Double]
 
-    init(referenceA4: Double) {
+    init(
+        referenceA4: Double,
+        fundamentalRatio: Float = 0.1,
+        supportRatio: Float = 0.03,
+        minimumSalience: Float = 0.06,
+        unexplainedShare: Float = 0.25,
+        highOvertoneFundamentalMargin: Float = 1.6,
+        requiredUnexplainedPartials: Int = 2
+    ) {
+        self.fundamentalRatio = fundamentalRatio
+        self.supportRatio = supportRatio
+        self.minimumSalience = minimumSalience
+        self.unexplainedShare = unexplainedShare
+        self.highOvertoneFundamentalMargin = highOvertoneFundamentalMargin
+        self.requiredUnexplainedPartials = requiredUnexplainedPartials
         var table: [Double] = []
         table.reserveCapacity(128 * Self.lookupPartials)
         for note in 0..<128 {
@@ -68,9 +104,14 @@ struct HarmonicNoteEvaluator {
         max(0.00015, 0.0004 * pow(10, (Double(note) - 60) / 30))
     }
 
-    func evaluate(frame: SpectralFrame, sampleRate: Double, tuningScale: Double = 1.0) -> (evidence: [UInt8: Evidence], observedCents: Double?) {
+    func evaluate(
+        frame: SpectralFrame,
+        sampleRate: Double,
+        tuningScale: Double = 1.0,
+        expectedNotes: Set<UInt8> = []
+    ) -> (evidence: [UInt8: Evidence], observedCents: Double?, candidateRecords: [EvaluatedCandidateRecord]) {
         let strongest = frame.strongestAmplitude
-        guard strongest > 0 else { return ([:], nil) }
+        guard strongest > 0 else { return ([:], nil, []) }
 
         let limit = min(Self.maximumPartialFrequency, sampleRate * 0.45)
         var amplitudes = [Float](repeating: 0, count: 128 * Self.lookupPartials)
@@ -92,11 +133,58 @@ struct HarmonicNoteEvaluator {
         let unambiguous = resolveSoundingNotes(from: plausible, amplitudes: amplitudes)
         var evidence: [UInt8: Evidence] = [:]
         for note in plausible {
+            let comb = (1...Self.evidencePartials).map { amplitudes[Self.index(note: note, partial: $0)] }
+            let noteStrongest = comb.max() ?? 0
+            let support = noteStrongest > 0 ? comb.filter { $0 >= noteStrongest * supportRatio }.count : 0
+            let unexplained = countUnexplainedPartials(of: note, by: unambiguous.subtracting([note]), amplitudes: amplitudes)
+            let exceeds = exceedsOvertones(of: unambiguous.subtracting([note]), note: note, amplitudes: amplitudes)
             if unambiguous.contains(note) {
-                evidence[note] = Evidence(level: level(of: note, amplitudes: amplitudes), isUnambiguous: true)
-            } else if exceedsOvertones(of: unambiguous, note: note, amplitudes: amplitudes) {
-                evidence[note] = Evidence(level: level(of: note, amplitudes: amplitudes), isUnambiguous: false)
+                evidence[note] = Evidence(
+                    level: level(of: note, amplitudes: amplitudes),
+                    isUnambiguous: true,
+                    partialEnergies: comb,
+                    supportCount: support,
+                    unexplainedPartialsCount: unexplained,
+                    exceedsOvertonePrediction: true
+                )
+            } else if exceeds {
+                evidence[note] = Evidence(
+                    level: level(of: note, amplitudes: amplitudes),
+                    isUnambiguous: false,
+                    partialEnergies: comb,
+                    supportCount: support,
+                    unexplainedPartialsCount: unexplained,
+                    exceedsOvertonePrediction: true
+                )
             }
+        }
+
+        let candidateNotes = plausible.union(expectedNotes).sorted()
+        var candidateRecords: [EvaluatedCandidateRecord] = []
+        candidateRecords.reserveCapacity(candidateNotes.count)
+        for note in candidateNotes {
+            let comb = (1...Self.evidencePartials).map { amplitudes[Self.index(note: note, partial: $0)] }
+            let noteStrongest = comb.max() ?? 0
+            let support = noteStrongest > 0 ? comb.filter { $0 >= noteStrongest * supportRatio }.count : 0
+            let isNotePlausible = plausible.contains(note)
+            let isNoteUnambiguous = unambiguous.contains(note)
+            let exceeds = isNoteUnambiguous || (isNotePlausible && evidence[note] != nil)
+            let unexplained = countUnexplainedPartials(of: note, by: unambiguous.subtracting([note]), amplitudes: amplitudes)
+            candidateRecords.append(
+                EvaluatedCandidateRecord(
+                    pitch: note,
+                    noteName: MIDINote.name(note),
+                    level: level(of: note, amplitudes: amplitudes),
+                    isPlausible: isNotePlausible,
+                    isUnambiguous: isNoteUnambiguous,
+                    exceedsOvertones: exceeds,
+                    isExpected: expectedNotes.contains(note),
+                    isMatched: false,
+                    supportCount: support,
+                    unexplainedPartialsCount: unexplained,
+                    partialEnergies: comb
+                )
+            )
         }
 
         // Measure the piano's actual tuning offset in cents (relative to referenceA4) from
@@ -113,7 +201,7 @@ struct HarmonicNoteEvaluator {
                 }
             }
         }
-        return (evidence, observedCents)
+        return (evidence, observedCents, candidateRecords)
     }
 
     // MARK: - Harmonic comb
@@ -121,18 +209,18 @@ struct HarmonicNoteEvaluator {
     private func isPlausible(note: UInt8, amplitudes: [Float], frameStrongest: Float) -> Bool {
         let comb = (1...Self.evidencePartials).map { amplitudes[Self.index(note: note, partial: $0)] }
         let strongest = comb.max() ?? 0
-        guard strongest >= frameStrongest * Self.minimumSalience else { return false }
+        guard strongest >= frameStrongest * minimumSalience else { return false }
 
         let frequency = partialFrequency(note: note, partial: 1)
         let fundamental = comb[0]
-        let support = comb.filter { $0 >= strongest * Self.supportRatio }.count
+        let support = comb.filter { $0 >= strongest * supportRatio }.count
 
         if frequency >= Self.singlePartialAboveHz {
-            return fundamental >= strongest * Self.fundamentalRatio
+            return fundamental >= strongest * fundamentalRatio
                 && (support >= 2 || fundamental >= frameStrongest * Self.highNoteSalience)
         }
         if frequency >= Self.weakFundamentalBelowHz {
-            return fundamental >= strongest * Self.fundamentalRatio && support >= 2
+            return fundamental >= strongest * fundamentalRatio && support >= 2
         }
         if frequency >= Self.missingFundamentalBelowHz || fundamental >= strongest * Self.weakFundamentalRatio {
             return fundamental >= strongest * Self.weakFundamentalRatio
@@ -141,8 +229,8 @@ struct HarmonicNoteEvaluator {
         }
 
         // Bottom-octave notes must prove themselves with a dense series of upper partials.
-        return comb[1] >= strongest * Self.fundamentalRatio
-            && comb[2] >= strongest * Self.fundamentalRatio
+        return comb[1] >= strongest * fundamentalRatio
+            && comb[2] >= strongest * fundamentalRatio
             && support >= 4
             && hasEnergyOffEveryHarmonicSeries(comb: comb, strongest: strongest)
     }
@@ -151,7 +239,7 @@ struct HarmonicNoteEvaluator {
     private func hasEnergyOffEveryHarmonicSeries(comb: [Float], strongest: Float) -> Bool {
         for multiple in 2...5 {
             let hasOffSeriesPartial = comb.enumerated().contains { offset, amplitude in
-                (offset + 1) % multiple != 0 && amplitude >= strongest * Self.fundamentalRatio
+                (offset + 1) % multiple != 0 && amplitude >= strongest * fundamentalRatio
             }
             if !hasOffSeriesPartial { return false }
         }
@@ -192,7 +280,7 @@ struct HarmonicNoteEvaluator {
             let predicted = others.reduce(Float(0)) { strongest, other in
                 max(strongest, tightOvertoneEstimate(of: other, at: frequency, amplitudes: amplitudes))
             }
-            return observed - predicted >= observed * Self.unexplainedShare
+            return observed - predicted >= observed * unexplainedShare
         }
 
         let fundamental = partialFrequency(note: note, partial: 1)
@@ -201,13 +289,25 @@ struct HarmonicNoteEvaluator {
             (overtoneNumber(of: other, at: fundamental) ?? 0) >= 3
         }
         if isHighOnAnOvertoneSeries {
-            guard isDoubledAtTheOctave else { return isUnexplained(partial: 1) }
-            return (1...Self.evidencePartials).filter(isUnexplained).count >= Self.requiredUnexplainedPartials
+            if !isDoubledAtTheOctave {
+                let observed = amplitudes[Self.index(note: note, partial: 1)]
+                guard observed > 0 else { return false }
+                let predicted = others.reduce(Float(0)) { strongest, other in
+                    max(strongest, predictedOvertone(of: other, at: fundamental, amplitudes: amplitudes))
+                }
+                return observed >= predicted * highOvertoneFundamentalMargin
+                    && (1...Self.evidencePartials).filter(isUnexplained).count >= requiredUnexplainedPartials
+            }
+            return (1...Self.evidencePartials).filter(isUnexplained).count >= requiredUnexplainedPartials
         }
         return (1...Self.evidencePartials).contains(where: isUnexplained)
     }
 
     private func isExplained(_ note: UInt8, by others: Set<UInt8>, amplitudes: [Float]) -> Bool {
+        countUnexplainedPartials(of: note, by: others, amplitudes: amplitudes) < requiredUnexplainedPartials
+    }
+
+    private func countUnexplainedPartials(of note: UInt8, by others: Set<UInt8>, amplitudes: [Float]) -> Int {
         var unexplainedPartials = 0
         for partial in 1...Self.evidencePartials {
             let observed = amplitudes[Self.index(note: note, partial: partial)]
@@ -217,11 +317,11 @@ struct HarmonicNoteEvaluator {
             let predicted = others.reduce(Float(0)) { strongest, other in
                 max(strongest, predictedOvertone(of: other, at: frequency, amplitudes: amplitudes))
             }
-            if observed - predicted >= observed * Self.unexplainedShare {
+            if observed - predicted >= observed * unexplainedShare {
                 unexplainedPartials += 1
             }
         }
-        return unexplainedPartials < Self.requiredUnexplainedPartials
+        return unexplainedPartials
     }
 
     /// What `note` alone would put at `frequency`, if one of its overtones lands there. Partial

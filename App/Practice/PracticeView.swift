@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PracticeView: View {
     @State private var session: PracticeSession
+    @State private var isShowingTelemetryPrompt = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -64,6 +65,21 @@ struct PracticeView: View {
             if newState == .finished {
                 AdManager.shared.handleSongFinished(in: newState)
             }
+        }
+        .onChange(of: session.microphoneStatus) { _, status in
+            if status == .listening, !AppEnvironment.isUITesting, !PracticeTelemetryLogger.hasPromptedUser {
+                isShowingTelemetryPrompt = true
+            }
+        }
+        .alert("Help Improve Mic Detection?", isPresented: $isShowingTelemetryPrompt) {
+            Button("Share & Help Improve") {
+                session.isSharingMicTelemetry = true
+            }
+            Button("Not Now", role: .cancel) {
+                PracticeTelemetryLogger.hasPromptedUser = true
+            }
+        } message: {
+            Text("Would you like to share short anonymized piano audio snippets and note accuracy data while practicing so we can make a better microphone pitch algorithm?")
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase != .inactive else { return }

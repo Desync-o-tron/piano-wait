@@ -158,7 +158,7 @@ class PianoKeyboardView(
         if (w <= 0f || h <= 0f) return
 
         val notes = zoom.keyboard.layout.range
-        val waiting = engine.waitingNotes
+        val waiting = if (engine.waitingNotes.isNotEmpty()) engine.waitingNotes else engine.upcomingNotes
         val latched = engine.latched
 
         // Draw white keys first, then black keys on top

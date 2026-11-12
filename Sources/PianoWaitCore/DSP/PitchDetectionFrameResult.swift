@@ -1,5 +1,46 @@
 import Foundation
 
+/// Per-candidate harmonic feature vector captured by the DSP evaluator for classifier training & telemetry.
+public struct EvaluatedCandidateRecord: Sendable, Codable, Equatable {
+    public let pitch: UInt8
+    public let noteName: String
+    public let level: Float
+    public let isPlausible: Bool
+    public let isUnambiguous: Bool
+    public let exceedsOvertones: Bool
+    public let isExpected: Bool
+    public let isMatched: Bool
+    public let supportCount: Int
+    public let unexplainedPartialsCount: Int
+    public let partialEnergies: [Float]
+
+    public init(
+        pitch: UInt8,
+        noteName: String,
+        level: Float,
+        isPlausible: Bool,
+        isUnambiguous: Bool,
+        exceedsOvertones: Bool,
+        isExpected: Bool,
+        isMatched: Bool,
+        supportCount: Int,
+        unexplainedPartialsCount: Int,
+        partialEnergies: [Float]
+    ) {
+        self.pitch = pitch
+        self.noteName = noteName
+        self.level = level
+        self.isPlausible = isPlausible
+        self.isUnambiguous = isUnambiguous
+        self.exceedsOvertones = exceedsOvertones
+        self.isExpected = isExpected
+        self.isMatched = isMatched
+        self.supportCount = supportCount
+        self.unexplainedPartialsCount = unexplainedPartialsCount
+        self.partialEnergies = partialEnergies
+    }
+}
+
 /// The outcome of analyzing one audio frame.
 public struct PitchDetectionFrameResult: Sendable, Equatable {
     public let rms: Float
@@ -19,6 +60,8 @@ public struct PitchDetectionFrameResult: Sendable, Equatable {
     public let tuningOffsetCents: Double
     /// Top spectral peaks in the frame for telemetry and diagnostics.
     public let topPeaks: [SpectralPeak]
+    /// Full harmonic feature vectors for all plausible + expected candidates in this frame.
+    public let evaluatedCandidates: [EvaluatedCandidateRecord]
     public let allExpectedMatched: Bool
 
     public init(
@@ -31,6 +74,7 @@ public struct PitchDetectionFrameResult: Sendable, Equatable {
         rawNotes: Set<UInt8>,
         tuningOffsetCents: Double = 0,
         topPeaks: [SpectralPeak] = [],
+        evaluatedCandidates: [EvaluatedCandidateRecord] = [],
         allExpectedMatched: Bool
     ) {
         self.rms = rms
@@ -42,6 +86,7 @@ public struct PitchDetectionFrameResult: Sendable, Equatable {
         self.rawNotes = rawNotes
         self.tuningOffsetCents = tuningOffsetCents
         self.topPeaks = topPeaks
+        self.evaluatedCandidates = evaluatedCandidates
         self.allExpectedMatched = allExpectedMatched
     }
 
@@ -55,6 +100,7 @@ public struct PitchDetectionFrameResult: Sendable, Equatable {
         rawNotes: [],
         tuningOffsetCents: 0,
         topPeaks: [],
+        evaluatedCandidates: [],
         allExpectedMatched: false
     )
 }

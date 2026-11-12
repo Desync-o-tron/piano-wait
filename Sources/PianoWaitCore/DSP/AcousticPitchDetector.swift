@@ -20,6 +20,18 @@ public final class AcousticPitchDetector {
         public var referenceA4 = 440.0
         /// Tracks the piano's live tuning offset in cents so slightly flat or sharp pianos stay locked.
         public var tracksLiveTuning = false
+        /// Minimum fundamental-to-strongest ratio for mid-range notes (>= 100 Hz).
+        public var fundamentalRatio: Float = 0.1
+        /// Minimum partial-to-strongest ratio for a partial to count as support.
+        public var supportRatio: Float = 0.03
+        /// Minimum note-strongest-to-frame-strongest salience ratio.
+        public var minimumSalience: Float = 0.06
+        /// Share of a partial's amplitude that must exceed overtone predictions to count as unexplained.
+        public var unexplainedShare: Float = 0.25
+        /// Headroom multiplier on the fundamental of an upper note sitting on a high overtone (>= 3).
+        public var highOvertoneFundamentalMargin: Float = 1.6
+        /// Number of unexplained partials required for a note to stand on its own as unambiguous.
+        public var requiredUnexplainedPartials: Int = 2
 
         public init() {}
     }
@@ -31,17 +43,34 @@ public final class AcousticPitchDetector {
         var troughLevel: Float = 0
     }
 
-    public var configuration: Configuration
+    public var configuration: Configuration {
+        didSet {
+            evaluator.fundamentalRatio = configuration.fundamentalRatio
+            evaluator.supportRatio = configuration.supportRatio
+            evaluator.minimumSalience = configuration.minimumSalience
+            evaluator.unexplainedShare = configuration.unexplainedShare
+            evaluator.highOvertoneFundamentalMargin = configuration.highOvertoneFundamentalMargin
+            evaluator.requiredUnexplainedPartials = configuration.requiredUnexplainedPartials
+        }
+    }
     public private(set) var estimatedTuningCents: Double = 0
 
     private let analyzer: SpectrumAnalyzer
-    private let evaluator: HarmonicNoteEvaluator
+    private var evaluator: HarmonicNoteEvaluator
     private var trackers: [UInt8: NoteTracker] = [:]
 
     public init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
         analyzer = SpectrumAnalyzer(frameSize: configuration.frameSize, fftSize: configuration.fftSize)
-        evaluator = HarmonicNoteEvaluator(referenceA4: configuration.referenceA4)
+        evaluator = HarmonicNoteEvaluator(
+            referenceA4: configuration.referenceA4,
+            fundamentalRatio: configuration.fundamentalRatio,
+            supportRatio: configuration.supportRatio,
+            minimumSalience: configuration.minimumSalience,
+            unexplainedShare: configuration.unexplainedShare,
+            highOvertoneFundamentalMargin: configuration.highOvertoneFundamentalMargin,
+            requiredUnexplainedPartials: configuration.requiredUnexplainedPartials
+        )
     }
 
     public func reset() {
@@ -97,7 +126,12 @@ public final class AcousticPitchDetector {
         }
 
         let tuningScale = configuration.tracksLiveTuning ? pow(2.0, estimatedTuningCents / 1200.0) : 1.0
-        let evaluation = evaluator.evaluate(frame: frame, sampleRate: sampleRate, tuningScale: tuningScale)
+        let evaluation = evaluator.evaluate(
+            frame: frame,
+            sampleRate: sampleRate,
+            tuningScale: tuningScale,
+            expectedNotes: expectedNotes
+        )
         let evidence = evaluation.evidence
         if let observedCents = evaluation.observedCents {
             let clamped = min(max(observedCents, -40), 40)
@@ -148,6 +182,21 @@ public final class AcousticPitchDetector {
         }
 
         let matched = sounding.intersection(expectedNotes)
+        let candidates = evaluation.candidateRecords.map { record in
+            EvaluatedCandidateRecord(
+                pitch: record.pitch,
+                noteName: record.noteName,
+                level: record.level,
+                isPlausible: record.isPlausible,
+                isUnambiguous: record.isUnambiguous,
+                exceedsOvertones: record.exceedsOvertones,
+                isExpected: record.isExpected,
+                isMatched: matched.contains(record.pitch),
+                supportCount: record.supportCount,
+                unexplainedPartialsCount: record.unexplainedPartialsCount,
+                partialEnergies: record.partialEnergies
+            )
+        }
         return PitchDetectionFrameResult(
             rms: rms,
             isAboveNoiseGate: true,
@@ -158,6 +207,7 @@ public final class AcousticPitchDetector {
             rawNotes: Set(evidence.filter(\.value.isUnambiguous).keys),
             tuningOffsetCents: estimatedTuningCents,
             topPeaks: topPeaks,
+            evaluatedCandidates: candidates,
             allExpectedMatched: !expectedNotes.isEmpty && matched == expectedNotes
         )
     }
